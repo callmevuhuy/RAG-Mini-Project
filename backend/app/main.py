@@ -19,6 +19,7 @@ from .models import (
     Product, ProductVariant,
 )
 from .llm import PROMPT_VERSION, ProviderError, extract, norm
+from .chat_engine import process_chat_turn
 from .schemas import (
     CartItemRead, CartItemWrite, CartRead, CheckoutRequest, DemoSessionRead,
     HealthRead, OrderItemRead, OrderRead, ProductRead, ChatMessageWrite, ChatMessageRead,
@@ -637,136 +638,19 @@ async def chat_message(
         db.commit()
         return answer
 
-    # Schema validation checks structure, not factual correctness or authorization.
-    # Treat every extracted field as untrusted until checked against backend state.
-    data = result.data
-    if data.intent not in {"create_order", "check_stock", "check_price", "update_order", "unknown_or_handoff"}:
-        data.intent = "unknown_or_handoff"
-    answer: dict = {"route": "handoff", "message": "Mình chưa xác định được yêu cầu. Bạn có thể hỏi giá, kiểm tra tồn kho, đặt hàng hoặc yêu cầu nhân viên hỗ trợ."}
-    order_id = None
-    # Resolve candidates exclusively against active SQLite catalog records. Model
-    # output never supplies an authoritative SKU, price, stock value, or order state.
-    products = db.scalars(select(Product).where(Product.active.is_(True)).options(
-        selectinload(Product.variants).selectinload(ProductVariant.inventory))).all()
-    query = norm(data.requested_product or payload.message)
-    candidates = []
-    for product in products:
-        names = [product.name, *(product.aliases or [])]
-        normalized_names = [norm(name) for name in names]
-        if any(name and (name in query or query in name) for name in normalized_names):
-            candidates.append(product)
-        else:
-            words = set(query.split())
-            if any(len(words & set(name.split())) >= 2 for name in normalized_names):
-                candidates.append(product)
-    # Load only this session's short-lived structured state and discard expired data.
-    state = db.scalar(select(ChatState).where(ChatState.session_id == demo_session.id))
-    now = int(time.time())
-    pending = dict(state.pending_order or {}) if state and state.expires_at > now else {}
-    if state and state.expires_at <= now:
-        db.delete(state); state = None
-
-    # Continue collecting only this owner's order, for at most 30 minutes. Store
-    # structured fields only; the raw customer message is never persisted.
-    if pending and data.intent in {"unknown_or_handoff", "create_order"} and not candidates:
-        pending["name"] = data.name or pending.get("name")
-        pending["phone"] = data.phone or pending.get("phone")
-        pending["address"] = data.address or pending.get("address")
-        pending["quantity"] = data.quantity or pending.get("quantity")
-        if any((data.name, data.phone, data.address, data.quantity)):
-            data.intent = "create_order"
-            data.quantity = pending.get("quantity")
-            variant_pending = db.scalar(select(ProductVariant).where(ProductVariant.sku == pending.get("sku")))
-            product_pending = db.scalar(select(Product).where(Product.id == variant_pending.product_id)) if variant_pending else None
-            candidates = [product_pending] if product_pending else []
-        if state:
-            state.pending_order = pending
-            state.expires_at = now + 1800
-
-    if data.intent in ("check_stock", "check_price", "create_order"):
-        # Ambiguous or missing catalog matches trigger clarification rather than
-        # allowing the model to choose a product arbitrarily.
-        if len(candidates) != 1:
-            answer = {"route":"needs_information", "message":"Bạn muốn hỏi về sản phẩm nào? Hãy gửi tên sản phẩm để mình tra cứu chính xác."}
-        else:
-            product = candidates[0]
-            variants = product.variants
-            normalized_message = norm(payload.message)
-            mentioned = [
-                v for v in variants
-                if all(
-                    re.search(rf"(?<!\w){re.escape(norm(str(value)))}(?!\w)", normalized_message)
-                    for value in (v.attributes or {}).values() if value
-                )
-            ]
-            if pending.get("sku"):
-                mentioned = [v for v in variants if v.sku == pending.get("sku")]
-            variant = mentioned[0] if len(mentioned) == 1 else (variants[0] if len(variants) == 1 else None)
-            # Price and availability answers are assembled from database rows,
-            # never trusted from generated model text.
-            if data.intent == "check_price":
-                prices = [f"{v.unit_price:,}₫" for v in ( [variant] if variant else variants )]
-                answer = {"route":"answer", "message": f"{product.name} có giá {', '.join(prices)}" + ("." if variant else " tùy phân loại. Bạn muốn xem phân loại nào?")}
-            elif data.intent == "check_stock":
-                stock_variants = [variant] if variant else variants
-                answer = {"route":"answer", "message": f"Tình trạng hàng của {product.name}: " + "; ".join(
-                    f"{', '.join((v.attributes or {}).values()) or v.sku}: còn {v.inventory.available_quantity if v.inventory else 0}" for v in stock_variants) + ("." if variant else ". Bạn muốn kiểm tra phân loại cụ thể nào?")}
-            elif data.intent == "create_order":
-                if variant is None:
-                    answer = {"route":"needs_information", "message":f"{product.name} có nhiều phân loại. Bạn muốn chọn: " + "; ".join(", ".join(v.attributes.values()) for v in variants) + "?"}
-                else:
-                    pending = {**pending, "sku":variant.sku,"quantity":data.quantity,"name":data.name or pending.get("name"),"phone":data.phone or pending.get("phone"),"address":data.address or pending.get("address")}
-                    # Never guess missing quantity or recipient fields. Persist only
-                    # structured, session-scoped pending state with a short TTL.
-                    if data.quantity is None:
-                        missing = ["số lượng"] + [label for key,label in (("name","tên người nhận"),("phone","số điện thoại demo"),("address","địa chỉ giao hàng demo")) if not pending.get(key)]
-                        if state is None:
-                            state = ChatState(session_id=demo_session.id, pending_order=pending, expires_at=now+1800); db.add(state)
-                        else:
-                            state.pending_order=pending; state.expires_at=now+1800
-                        answer = {"route":"needs_information", "message":f"Bạn muốn đặt {product.name} ({', '.join(variant.attributes.values())}). Vui lòng gửi {', '.join(missing)}. Chỉ dùng thông tin giả cho demo nhé."}
-                    else:
-                        qty = data.quantity
-                        available = variant.inventory.available_quantity if variant.inventory else 0
-                        if qty > available:
-                            answer = {"route":"out_of_stock", "message":f"Phân loại này hiện còn {available} sản phẩm, nên chưa thể đặt {qty}."}
-                        else:
-                            missing = [label for key,label in (("name","tên người nhận"),("phone","số điện thoại demo"),("address","địa chỉ giao hàng demo")) if not pending.get(key)]
-                            if missing:
-                                if state is None:
-                                    state = ChatState(session_id=demo_session.id, pending_order=pending, expires_at=now+1800); db.add(state)
-                                else:
-                                    state.pending_order=pending; state.expires_at=now+1800
-                                answer = {"route":"needs_information", "message":f"Mình đã ghi nhận {qty} × {product.name} ({', '.join(variant.attributes.values())}). Để tạo đơn nháp, bạn vui lòng gửi {', '.join(missing)}. Chỉ dùng thông tin giả cho demo nhé."}
-                            else:
-                                # Create a draft only after SKU, quantity, current
-                                # stock, and every required delivery field pass checks.
-                                order = Order(id=uuid4().hex, session_id=demo_session.id,status="pending_confirmation",recipient_name=pending["name"],phone_number=pending["phone"],delivery_address=pending["address"],total_amount=qty*variant.unit_price,created_at=datetime.now(timezone.utc))
-                                order.items.append(OrderItem(sku=variant.sku,product_name_snapshot=product.name,variant_snapshot=variant.attributes or {},quantity=qty,unit_price_snapshot=variant.unit_price))
-                                db.add(order); db.flush(); order_id=order.id
-                                db.add(AuditLog(request_id=request.state.request_id,order_id=order.id,actor_session_id=demo_session.id,action="order.created_from_chat",details={"item_count":1,"total_amount":order.total_amount},created_at=datetime.now(timezone.utc)))
-                                if state: db.delete(state)
-                                answer={"route":"pending_confirmation","order_id":order.id,"message":f"Đã tạo đơn nháp #{order.id[:10].upper()} cho {qty} × {product.name}, tổng {order.total_amount:,}₫. Đơn đang chờ xác nhận; chưa thanh toán hoặc trừ kho."}
-    elif data.intent == "update_order":
-        # Update only this owner's pending, single-item draft. A supplied reference
-        # must resolve to one order; inventory is checked again before the write.
-        orders = db.scalars(select(Order).where(Order.session_id==demo_session.id,Order.status=="pending_confirmation").options(selectinload(Order.items))).all()
-        ref=(data.order_reference or "").lower()
-        matched=[o for o in orders if not ref or o.id.lower().startswith(ref)]
-        if len(matched)==1 and len(matched[0].items)==1 and data.quantity:
-            order=matched[0]; item=order.items[0]
-            variant=db.scalar(select(ProductVariant).where(ProductVariant.sku==item.sku).options(selectinload(ProductVariant.inventory)))
-            available=variant.inventory.available_quantity if variant and variant.inventory else 0
-            if data.quantity>available:
-                answer={"route":"out_of_stock","message":f"Kho hiện chỉ còn {available}; mình chưa thay đổi đơn."}
-            else:
-                item.quantity=data.quantity; item.unit_price_snapshot=variant.unit_price; order.total_amount=data.quantity*variant.unit_price
-                db.add(AuditLog(request_id=request.state.request_id,order_id=order.id,actor_session_id=demo_session.id,action="order.updated_from_chat",details={"quantity":data.quantity,"total_amount":order.total_amount},created_at=datetime.now(timezone.utc)))
-                answer={"route":"updated_order","order_id":order.id,"message":f"Đã cập nhật đơn nháp #{order.id[:10].upper()} thành số lượng {data.quantity}. Tổng mới {order.total_amount:,}₫; đơn vẫn chờ xác nhận."}
-        else:
-            answer={"route":"needs_information","message":"Mình chỉ có thể sửa đơn nháp đang chờ xác nhận. Vui lòng gửi mã đơn (10 ký tự đầu) và số lượng mới; nếu có nhiều sản phẩm cần chỉ rõ sản phẩm."}
-    elif data.intent == "unknown_or_handoff" or data.requires_human_review:
-        answer={"route":"handoff","message":"Yêu cầu này cần nhân viên hỗ trợ. Đây là bản demo nên mình chưa gửi tin cho nhân viên thật; bạn có thể tiếp tục hỏi về giá, tồn kho hoặc đơn nháp."}
+    # 5. ĐIỀU PHỐI XỬ LÝ HỘI THOẠI THƯƠNG MẠI & MÁY TRẠNG THÁI (CHAT ENGINE)
+    # Tách biệt rõ ràng: Extractor chỉ trích xuất ngôn ngữ không tin cậy.
+    # Chat Engine chịu trách nhiệm đối chiếu danh mục SQLite, gom slot đa lượt,
+    # kiểm tra tồn kho và xác thực các thao tác tạo/sửa đơn hàng an toàn.
+    answer = await process_chat_turn(
+        message=payload.message,
+        db=db,
+        session_id=demo_session.id,
+        request_id=request.state.request_id,
+        client_message_id=payload.client_message_id,
+        rag_mixed_res=rag_mixed_res
+    )
+    final_intent = answer.pop("intent", result.data.intent)
 
     if rag_mixed_res:
         answer["route"] = "mixed"
@@ -774,16 +658,26 @@ async def chat_message(
         answer["citations"] = rag_mixed_res["citations"]
         answer["message"] = f"{rag_mixed_res['answer']}\n\n[Thao tác đơn hàng]: {answer['message']}"
 
-    # Save operational metadata and the response only. Exclude raw user messages
-    # and extracted delivery details from the chat log.
-    db.add(ChatLog(session_id=demo_session.id,client_message_id=payload.client_message_id,
-        request_id=request.state.request_id,model_id=result.model_id,prompt_version=PROMPT_VERSION,
-        intent=data.intent,validation_status=result.validation_status,route=answer["route"],
-        latency_ms=result.latency_ms,input_tokens=result.input_tokens,output_tokens=result.output_tokens,
-        retry_count=result.retry_count,response_payload=answer,created_at=datetime.now(timezone.utc)))
+    # Lưu nhật ký vận hành (Audit Metadata). Tuyệt đối không lưu tin nhắn thô
+    # hoặc thông tin giao hàng chi tiết vào bảng ChatLog nhằm bảo vệ quyền riêng tư.
+    db.add(ChatLog(
+        session_id=demo_session.id,
+        client_message_id=payload.client_message_id,
+        request_id=request.state.request_id,
+        model_id=result.model_id,
+        prompt_version=PROMPT_VERSION,
+        intent=final_intent,
+        validation_status=result.validation_status,
+        route=answer["route"],
+        latency_ms=result.latency_ms,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        retry_count=result.retry_count,
+        response_payload=answer,
+        created_at=datetime.now(timezone.utc)
+    ))
     db.commit()
     return answer
-
 
 @app.get("/api/v1/rag/status")
 def get_rag_status():

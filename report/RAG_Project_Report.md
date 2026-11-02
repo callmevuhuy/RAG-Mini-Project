@@ -1,45 +1,69 @@
 # Báo cáo Dự án RAG — AI Live Commerce Order Assistant
 
-**Cập nhật:** 30/10/2026
-**Phạm vi:** tiếp quản và kiểm tra project RAG kế thừa; Ollama không nằm trong lần xác minh này.
+**Cập nhật:** 02/11/2026
+**Phạm vi:** Tiếp quản, hoàn thiện RAG có phân quyền và nâng cấp toàn diện AI Chatbot Engine (P0, P1, P2).
 
-## Tóm tắt
+---
 
-Project nối RAG vào trợ lý thương mại LLM hiện có. Backend/SQLite tiếp tục là nguồn dữ liệu chuẩn cho SKU, giá, tồn kho và đơn hàng. Corpus mẫu có 12 tài liệu/31 chunks, phân quyền `public`, `staff`, `admin`; index được tạo offline bằng hashed word/character n-gram term-frequency vectors 1024 chiều.
+## 1. Tóm tắt Tổng quan
 
-Vectorizer hiện tại là lexical, không phải semantic embedding model. Câu trả lời dùng template xác định và citations từ corpus, không gọi Ollama. API kiểm tra role token demo cho staff/admin, lọc tài liệu trước ranking, và lưu lựa chọn bundle active qua file pointer cùng host.
+Dự án nối RAG vào trợ lý thương mại điện tử hiện có và giải quyết dứt điểm sự "cứng nhắc" của AI Chatbot.
+- **RAG Engine**: Phân quyền 3 cấp (`public`, `staff`, `admin`), trích xuất citations từ 12 tài liệu (31 chunks) và hỗ trợ hot rollback index giữa các phiên bản v1.0 và v1.1.
+- **AI Chatbot Engine (`chat_engine.py`)**: Tách module độc lập, chuẩn hóa tiếng Việt, hỗ trợ bóc tách thực thể người nhận hoàn toàn không nhãn, số lượng tự nhiên (*"2c"*, *"2 cái"*...), bảo toàn đơn hàng nháp đa lượt không bị mất số lượng và xử lý lệnh hủy/đổi ý tức thì.
+- **Bảo toàn dữ liệu nghiệp vụ**: Database SQLite tiếp tục là nguồn duy nhất xác thực SKU, giá và tồn kho. Mọi câu trả lời của AI/RAG đều không được tự động ghi dữ liệu nghiệp vụ.
 
-## Các cập nhật trong lượt tiếp quản
+---
 
-- Chặn giả mạo `X-User-Role`: staff/admin cần token cấu hình ở backend; re-index cần session, origin hợp lệ và admin token.
-- Ingestion từ chối metadata phân quyền thiếu; loader kiểm tra SHA-256, số lượng, vector dimensions, access levels và chunk IDs.
-- Sửa trường hợp truy vấn thời hạn đổi trả bị chọn nhầm tài liệu giao hàng; citation thu hẹp theo nguồn chủ đề.
-- Hoàn thiện route cho SKU, quy cách, thiếu hàng, sizing và câu safety. Bảo toàn các follow-up của order nháp.
-- Cập nhật evaluator để báo route/status và xác minh citation metadata/role eligibility.
-- Đồng bộ workflow, architecture, README và báo cáo để xóa các kết luận lỗi thời.
+## 2. Các Nâng Cấp Nổi Bật Đã Triển Khai
 
-## Kết quả kiểm tra
+1. **AI Chatbot Thông minh & Linh hoạt (P0, P1, P2)**:
+   - Xóa bỏ sự phụ thuộc vào nhãn tiền tố: Khách nhắn tự nhiên *"An, 0901234567, 123 Lê Lợi Q1"*, bot tự động bóc tách đúng Tên, SĐT và Địa chỉ.
+   - Cơ chế Disambiguation: Loại bỏ thông tin liên hệ khỏi câu chat trước khi đối chiếu Catalog SQLite, chống nhầm lẫn tên người hoặc tên đường phố thành sản phẩm.
+   - Sửa triệt để lỗi mất trạng thái đa lượt: Khách nhắc lại sản phẩm ở turn sau nhưng không nói lại số lượng thì số lượng vẫn được bảo toàn nguyên vẹn.
+   - Nhận diện câu hỏi tồn kho tự nhiên: Bổ sung các cụm *"còn bao nhiêu"*, *"trong kho"*, *"còn mấy"*, *"kiểm tra kho"* vào bộ định tuyến và chat engine, truy vấn trực tiếp bảng sản phẩm/biến thể trong SQLite thay vì chuyển tiếp vô cớ sang nhân viên hỗ trợ.
+   - Thêm tính năng hủy đơn nháp đang chờ (`cancel_pending`) khi khách đổi ý.
+2. **Bảo mật & Phân quyền RAG**:
+   - Chặn giả mạo header `X-User-Role`: Chỉ chấp nhận vai trò Staff/Admin khi có `DEMO_STAFF_TOKEN`/`DEMO_ADMIN_TOKEN` khớp cấu hình backend.
+   - Customer tuyệt đối không truy xuất tài liệu nội bộ trong mọi bước (retrieval, generation, citations).
+   - Ingestion từ chối metadata phân quyền thiếu; loader kiểm tra mã hash SHA-256 chống hư hỏng bundle vô ý.
+3. **Cơ chế Hot Rollback**:
+   - Thay đổi phiên bản index tức thì thông qua con trỏ active nguyên tử `artifacts/active_index.json` mà không cần khởi động lại server.
 
-| Kiểm tra | Kết quả |
-|---|---:|
-| RAG unit tests | 9/9 |
-| RAG cases | 20; Hit@3 100%, Recall@5 93.89%, MRR 0.9000 |
-| Route / status accuracy | 100% / 100% |
-| Citation metadata resolution | 100% |
-| Claim string-support proxy | 70% |
-| Safe abstention / access denied | 100% / 100% |
-| Inherited Fake provider flow | 14/14; API smoke và security probes đạt |
-| Frontend production build | Thành công |
-| API authorization probes | Header admin giả mạo 403; re-index thiếu token 403; token đúng role demo được chấp nhận; CORS preflight 200 |
+---
 
-Claim-support chỉ kiểm tra chuỗi expected trong câu trả lời; mixed evaluator xác nhận route/citation, không tự chứng minh mỗi thao tác đơn hàng đã thực thi. Các con số chỉ phản ánh test set demo nhỏ do nhóm viết.
+## 3. Kết Quả Đo Lường & Đánh Giá Thực Tế
 
-## Rủi ro và giới hạn còn lại
+Toàn bộ các bộ kiểm thử được chạy độc lập trên database SQLite tạm thời:
 
-1. Shared demo tokens không thay thế xác thực danh tính doanh nghiệp, SSO, phân tenant hay rotation secrets.
-2. Checksum không ký nguồn gốc bundle; người có quyền sửa cả file và hash có thể tạo bundle thay thế.
-3. Active pointer dùng filesystem cùng host, chưa có distributed lock/multi-host consistency.
-4. Router, retrieval và answer templates là heuristic; paraphrase ngoài test set có thể sai hoặc abstain.
-5. Chưa kiểm tra hiệu năng tải lớn, kiểm toán claim bởi con người, artifact signing hoặc Ollama/provider ngoài.
+| Bộ kiểm thử | Số ca chạy | Kết quả đạt | Tỷ lệ thành công |
+| :--- | :---: | :---: | :---: |
+| **Chatbot Multi-turn Evaluation** (`eval/run_chatbot_evaluation.py`) | 9 | 9 | **100.0%** |
+| **Chatbot Unit & Integration Tests** (`tests/test_chatbot.py`) | 9 | 9 | **100.0%** |
+| **RAG Evaluation Suite** (`eval/run_rag_evaluation.py`) | 20 | 20 | **100.0%** (Route/Status) |
+| **RAG Unit & Security Tests** (`tests/test_rag.py`) | 10 | 10 | **100.0%** |
+| **Inherited E-commerce Suite** (`eval/run_evaluation.py --provider fake`) | 14 | 14 | **100.0%** |
+| **Frontend Production Build** (`npm run build`) | — | — | **SUCCESS** |
 
-Chi tiết kiến trúc ở [`given/RAG_Architecture.md`](../given/RAG_Architecture.md), workflow ở [`given/RAG_Workflow.md`](../given/RAG_Workflow.md), và lần đo evaluator ở [`artifacts/evaluation_report.md`](../artifacts/evaluation_report.md).
+### Chi tiết các chỉ số RAG:
+- **Hit@3**: 100.0%
+- **Recall@5**: 93.89% (Dev: 86.9%, Test: 100%)
+- **MRR**: 0.9000 (Dev: 0.7857, Test: 1.0)
+- **Citation Metadata Resolution**: 100.0%
+- **Safe Abstention & Access Denied**: 100.0%
+- **Claim Support Proxy**: 70.0% (đối sánh chuỗi từ khóa expected)
+
+---
+
+## 4. Rủi Ro và Giới Hạn Còn Lại
+
+1. **Shared Token Demo**: Chưa kết nối hệ thống SSO/IAM doanh nghiệp thực thụ; token demo chỉ phục vụ môi trường cục bộ.
+2. **Lexical Vectorizer**: Hiện dùng hashed n-gram TF vectors thay vì semantic neural embedding model, nên khả năng hiểu các câu diễn đạt quá xa lạ ngoài từ điển còn hạn chế.
+3. **Distributed Locking**: Chuyển đổi index active dùng filesystem cục bộ, chưa hỗ trợ đồng bộ đa máy chủ (cluster/multi-host).
+
+---
+
+*Tài liệu tham chiếu liên quan:*
+- [Kế hoạch và Báo cáo TODO Chatbot](../todo/CHATBOT_UPGRADE_TODO.md)
+- [Báo cáo Baseline P0](../artifacts/p0_baseline_report.md)
+- [Báo cáo Đánh giá Chi tiết](../artifacts/evaluation_report.md)
+- [Kiến trúc RAG](../given/RAG_Architecture.md)

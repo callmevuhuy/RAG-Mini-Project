@@ -26,13 +26,17 @@ KNOWLEDGE_PATTERNS = [
 ORDER_ACTION_PATTERNS = [
     r"\bchot\s+\d", r"\bchot\b", r"\bdat mua\b", r"\bdat hang\b", r"\bmua\s+\d", r"\blay\s+\d",
     r"\bthem vao don\b", r"\bthem vao gio\b", r"\bsua don\b", r"\bdoi don\b", r"\bcap nhat don\b",
-    r"\bdat\s+\d", r"\btoi muon dat\b", r"\bminh muon dat\b", r"\bmuon dat\b"
+    r"\bdat\s+\d", r"\btoi muon dat\b", r"\bminh muon dat\b", r"\bmuon dat\b",
+    r"\bcho\s+(?:toi|minh)\s+\d", r"\blay\s+cho\s+(?:toi|minh)\s+\d"
 ]
 
 ORDER_READ_PATTERNS = [
     r"\bgia\s+bao\s+nhieu\b", r"\bgia\s+the\s+nao\b", r"\bgia\s+sao\b",
     r"(?<!giam\s)\bgia\b", r"\bcon hang\b", r"\bton kho\b", r"\bco hang\b", r"\btinh trang\b",
-    r"\bcon size\b", r"\bhet hang\b"
+    r"\bcon size\b", r"\bhet hang\b",
+    r"\bcon\s+bao\s+nhieu\b", r"\bcon\s+bn\b", r"\bcon\s+may\b",
+    r"\btrong\s+kho\b", r"\bkiem\s+tra\s+kho\b", r"\bso\s+luong\s+con\b",
+    r"\bso\s+luong\s+ton\b", r"\bco\s+san\b", r"\bcon\s+(?:khong|ko)\b"
 ]
 
 HANDOFF_PATTERNS = [
@@ -40,7 +44,7 @@ HANDOFF_PATTERNS = [
 ]
 
 SAFETY_PATTERNS = [
-    r"\bbo qua moi chinh sach\b", r"\bbo qua chinh sach\b", r"\bbo qua huong dan\b",
+    r"\bbo qua moi\b", r"\bbo qua quy tac\b", r"\bbo qua kiem tra\b", r"\bbo qua moi chinh sach\b", r"\bbo qua chinh sach\b", r"\bbo qua huong dan\b",
     r"\btiet lo api key\b", r"\btiet lo secret\b", r"\bkhoa api secret\b", r"\bxoa moi don hang\b",
     r"\bhuy het tat ca don hang\b", r"\bhack\b", r"\bbypass\b"
 ]

@@ -12,8 +12,15 @@ from dataclasses import dataclass
 import httpx                                                   #type ignore
 from pydantic import BaseModel, ConfigDict, Field, ValidationError      #type ignore
 
+from .chat_engine import (
+    extract_contact_info,
+    extract_quantity as engine_extract_quantity,
+    extract_phone as engine_extract_phone,
+    normalize_text as engine_norm,
+)
+
 PROMPT_VERSION = "order-extraction-v2"
-INTENTS = {"create_order", "check_stock", "check_price", "update_order", "unknown_or_handoff"}
+INTENTS = {"create_order", "check_stock", "check_price", "update_order", "cancel_pending", "unknown_or_handoff"}
 
 
 class Extraction(BaseModel):
@@ -49,49 +56,69 @@ class ProviderError(Exception):
 
 def norm(value: str) -> str:
     """Normalize Vietnamese text for accent-insensitive rule and catalog matching."""
-    value = value.lower().replace("đ", "d")
-    return " ".join("".join(c for c in unicodedata.normalize("NFD", value) if unicodedata.category(c) != "Mn").split())
+    return engine_norm(value)
 
 
 def explicit_quantity(text: str) -> int | None:
     """Read quantities only when directly labeled by a shopping/action phrase."""
-    normalized = norm(text)
-    match = re.search(r"\b(?:so luong|chot|mua|lay|dat)\s*(\d{1,2})\b", normalized)
-    return int(match.group(1)) if match else None
+    return engine_extract_quantity(text)
 
 
 def heuristic(text: str) -> Extraction:
-    """Extract a conservative intent and fields without calling an external model."""
+    """Trích xuất intent và các trường từ tin nhắn tiếng Việt theo heuristic chuẩn hóa (Fake Mode).
+
+    Quy trình:
+    1. Nhận diện ý định theo từ khóa ngữ nghĩa rõ ràng.
+    2. Bóc tách thông tin liên hệ người nhận (hỗ trợ cả có nhãn và không nhãn).
+    3. Trích xuất số lượng mua (hỗ trợ các dạng '2c', '2 cái', 'chốt 2'...).
+    4. Giữ nguyên ranh giới an toàn: không tự bịa đặt số lượng hay thông tin nhận hàng.
+    """
     t = norm(text)
+
+    # 1. Nhận diện ý định
     if any(k in t for k in ("nhan vien", "gap nguoi", "ho tro truc tiep", "khieu nai")):
         intent = "unknown_or_handoff"
     elif any(k in t for k in ("sua don", "doi don", "cap nhat don", "tang so luong", "giam so luong")):
         intent = "update_order"
-    elif any(k in t for k in ("con hang", "ton kho", "co hang", "co size", "het hang")):
+    elif any(k in t for k in ("con hang", "ton kho", "co hang", "co size", "con size", "het hang", "con bao nhieu", "con bn", "con may", "trong kho", "kiem tra kho", "co san", "con khong", "con ko", "so luong con", "so luong ton")):
         intent = "check_stock"
-    elif re.search(r"\b(?:gia|bao nhieu tien|bao nhieu vnd)\b", t):
+    elif re.search(r"\b(?:gia|bao nhieu tien|bao nhieu vnd|gia sao|gia the nao)\b", t):
         intent = "check_price"
-    elif any(k in t for k in ("dat mua", "dat hang", "muon dat", "dat ", "mua ", "chot ", "lay ", "cho toi", "cho minh")):
+    elif any(k in t for k in ("dat mua", "dat hang", "muon dat", "dat ", "mua ", "chot ", "lay ", "cho toi", "cho minh", "them vao don")):
         intent = "create_order"
     else:
         intent = "unknown_or_handoff"
-    phone = re.search(r"(?<!\d)(?:\+?\d[\d()\s.-]{6,}\d)(?!\d)", text)
-    name = re.search(r"(?:ten|nguoi nhan)\s*(?:(?:toi|minh)\s*)?(?:la\s*)?[:,-]?\s*([^,;.]{2,80})", t)
-    address = re.search(r"(?:địa chỉ(?: giao hàng)?|dia chi(?: giao hang)?|giao đến|giao về|giao den|giao ve)\s+([^;.]{10,300})", text, re.I)
+
+    # 2. Bóc tách thực thể người nhận (hỗ trợ cả dạng không nhãn: 'Tên, SĐT, Địa chỉ')
+    contact = extract_contact_info(text)
+
+    # 3. Mã đơn hàng (nếu đang yêu cầu cập nhật đơn)
     order_ref = re.search(r"(?:don|order)\s*(?:#|ma)?\s*([a-f0-9]{8,32})", text, re.I)
-    quantity_match = re.search(r"\b(?:so luong|chot|mua|lay|dat)\s*(\d{1,2})\b", t)
-    if quantity_match is None and not phone and not address and re.fullmatch(r"\s*\d{1,2}\s*", t):
-        quantity_match = re.search(r"\d{1,2}", t)
-    quantity = int(quantity_match.group(1) if quantity_match.lastindex else quantity_match.group(0)) if quantity_match else None
-    if intent == "update_order" and order_ref and quantity_match and quantity == int(order_ref.group(1)[:2], 16):
-        # When a bare quantity follows the order ID, prefer that later number.
+
+    # 4. Trích xuất số lượng
+    quantity = engine_extract_quantity(text)
+    if intent == "update_order" and order_ref and quantity == int(order_ref.group(1)[:2], 16):
+        # Khi số lượng đứng sau mã đơn hàng, ưu tiên con số cuối cùng
         numbers = re.findall(r"\b(\d{1,2})\b", t)
         quantity = int(numbers[-1]) if len(numbers) > 1 else quantity
-    return Extraction(intent=intent, requested_product=text.strip()[:160], quantity=quantity,
-                      phone=phone.group(0).strip() if phone else None,
-                      name=name.group(1).strip() if name else None,
-                      address=address.group(1).strip() if address else None,
-                      order_reference=order_ref.group(1) if order_ref else None)
+
+    # Nếu người dùng gửi thông tin liên lạc nhận hàng trong lượt thoại
+    if contact.phone or contact.name or contact.address:
+        if intent == "unknown_or_handoff":
+            intent = "create_order"
+
+    # Chuỗi sản phẩm yêu cầu: ưu tiên chuỗi đã loại bỏ tên/sđt/địa chỉ để đối chiếu catalog không bị nhầm lẫn
+    req_prod = (contact.residual_text if contact.residual_text else text.strip())[:160]
+
+    return Extraction(
+        intent=intent,
+        requested_product=req_prod,
+        quantity=quantity,
+        phone=contact.phone,
+        name=contact.name,
+        address=contact.address,
+        order_reference=order_ref.group(1) if order_ref else None
+    )
 
 
 async def extract(text: str) -> LLMResult:

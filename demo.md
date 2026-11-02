@@ -1,14 +1,18 @@
 # Kịch bản Thuyết trình Demo (10–12 Phút)
 
-**Dự án:** Mở rộng AI Live Commerce Order Assistant với Hệ thống RAG Phân Quyền (Group 7)
+**Dự án:** Mở rộng AI Live Commerce Order Assistant với Hệ thống RAG Phân Quyền & AI Chatbot Thông Minh (Group 7)
 **Thời lượng:** 10–12 phút trình diễn + 3–5 phút Q&A
 
 ---
 
 ## Chuẩn bị Môi trường Trước Buổi Demo
 
-1. **Khởi động Backend FastAPI:**
+1. **Khởi động Backend FastAPI trong Môi trường ảo:**
    ```powershell
+   # Kích hoạt môi trường ảo Python
+   .\.venv\Scripts\Activate.ps1
+
+   # Khởi chạy server API
    $env:LLM_PROVIDER = "fake"
    python -m uvicorn backend.app.main:app --reload
    ```
@@ -46,18 +50,22 @@
 
 ---
 
-### Bước 3: Thao tác Đơn hàng qua Database/Inventory Kế thừa (2 phút)
-* **Mục tiêu:** Chứng minh logic đặt hàng, kiểm tra tồn kho và snapshot giá vẫn nằm trọn vẹn ở SQLite Database và backend validation, RAG không can thiệp trái phép.
-* **Câu hỏi 1 (Kiểm tra tồn kho):** *"Bình giữ nhiệt Everyday màu Kem 750ml còn hàng không?"*
-  * Trả lời trực tiếp từ DB: *"Tình trạng hàng của Bình giữ nhiệt Everyday: Kem, 750ml: còn 0."*
-* **Câu hỏi 2 (Tạo đơn nháp thiếu thông tin):** *"Tôi muốn đặt Áo thun basic cotton màu Xanh size M"*
-  * Backend yêu cầu gửi thêm: tên người nhận, SĐT và địa chỉ.
-* **Câu hỏi 3 (Tạo đơn nháp hoàn chỉnh):** *"Chốt 1 Áo thun basic cotton màu Xanh size M, tên là Nguyễn Văn A, SĐT 0901234567, địa chỉ 123 Lê Lợi Quận 1"*
-  * Backend xác thực tồn kho, tạo đơn nháp `#DRAFT...` và hiển thị xác nhận.
+### Bước 3: Trình diễn AI Chatbot Mới — Hội thoại Đa lượt & Dữ liệu Không nhãn (2.5 phút)
+* **Mục tiêu:** Chứng minh bot không còn "cứng nhắc": xử lý cách nói tự nhiên của người Việt, bóc tách thực thể không nhãn, bảo toàn số lượng đơn nháp và hỗ trợ đổi ý an toàn.
+* **Kịch bản 1 (Đặt hàng với thông tin giao hàng KHÔNG NHÃN):**
+  * *Lượt 1:* *"Lấy cho mình 1 áo thun basic cotton màu Xanh size M"* $\rightarrow$ Bot ghi nhận sản phẩm và hỏi thông tin người nhận.
+  * *Lượt 2 (Nhập liệu tự nhiên không có nhãn 'tên', 'sđt', 'địa chỉ'):* *"Nguyễn Văn An, 0901234567, 123 Lê Lợi, Phường Bến Nghé, Quận 1"*
+  * *Kết quả:* Bot tự động tách Tên, SĐT, Địa chỉ và tạo ngay đơn nháp `#DRAFT...` thành công mà không hỏi lại.
+* **Kịch bản 2 (Chống mất số lượng khi nhắc lại sản phẩm):**
+  * *Lượt 1:* *"Cho mình lấy 2 bình giữ nhiệt Everyday màu Trắng 500ml"*
+  * *Lượt 2:* *"Bình giữ nhiệt đó gửi cho Trần Bình, sđt 0987654321, địa chỉ 456 Hai Bà Trưng, Quận 3"*
+  * *Kết quả:* Bot không bị ghi đè mất số lượng, tạo đơn đúng **2 × Bình giữ nhiệt Everyday** và không bị nhầm chữ "Bình" trong tên người nhận thành sản phẩm (nhờ cơ chế Entity Disambiguation).
+* **Kịch bản 3 (Đổi ý và hủy đơn an toàn):**
+  * Đang trong luồng hỏi thông tin, khách nhắn: *"Thôi mình đổi ý không mua nữa, hủy đơn giúp mình"* $\rightarrow$ Bot xóa sạch state pending và phản hồi lịch sự, không bị kẹt phiên chat.
 
 ---
 
-### Bước 4: Truy vấn Hỗn hợp (Mixed Query) An toàn (2 phút)
+### Bước 4: Truy vấn Hỗn hợp (Mixed Query) An toàn (1.5 phút)
 * **Câu hỏi:** *"Áo thun basic cotton có được đổi trả không, chốt 1 Áo thun basic cotton màu Xanh size M"*
 * **Kết quả hiển thị:**
   * Badge định tuyến: `⚡ Hỗn hợp (RAG + Đơn hàng)`.
@@ -81,14 +89,15 @@
 ---
 
 ### Bước 6: Trình diễn Báo cáo Metrics & Kịch bản Re-index v1.0 → v1.1 (2 phút)
-1. **Show kết quả Evaluation 20 Cases:**
-   * Mở terminal chạy lệnh:
+1. **Show kết quả Evaluation:**
+   * Mở terminal chạy các lệnh đo lường:
      ```powershell
+     python eval/run_chatbot_evaluation.py
      python -m eval.run_rag_evaluation --split all
      ```
-   * Trình bày các chỉ số ấn tượng: **Hit@3: 100%**, **Recall@5: 93.89%**, **MRR: 0.9000**, **Citation Resolve: 100%**, **Safe Abstention: 100%**, **Access Denied: 100%**.
+   * Trình bày các chỉ số: **Chatbot Multi-turn: 100% (9/9)**, **RAG Hit@3: 100%**, **Recall@5: 93.89%**, **MRR: 0.9000**, **Citation Resolve: 100%**, **Safe Abstention: 100%**, **Access Denied: 100%**.
 2. **Kịch bản Re-index v1.0 lên v1.1:**
    * Khi đang ở index v1.0, hỏi: *"Thời hạn đổi trả hàng là bao nhiêu ngày?"* $\rightarrow$ Trả lời: **07 ngày**.
-   * Chuyển Role sang **"Quản trị viên (Admin)"**, bấm nút **"Re-index v1.1"** trên thanh điều khiển. Xác nhận version mới qua `/api/v1/rag/status`; không cam kết thời gian kích hoạt cố định.
+   * Chuyển Role sang **"Quản trị viên (Admin)"**, bấm nút **"Re-index v1.1"** trên thanh điều khiển. Xác nhận version mới qua `/api/v1/rag/status`.
    * Gửi lại câu hỏi trên: Trợ lý lập tức cập nhật câu trả lời: **14 ngày** (kèm phiên bản trích dẫn hiển thị `v1.1`).
-   * Bấm nút **"Rollback v1.0"**: Trợ lý quay trở lại chính sách 07 ngày an toàn.
+   * Bấm nút **"Rollback v1.0"**: Trợ lý quay trở lại chính sách 07 ngày an toàn tức thì.
