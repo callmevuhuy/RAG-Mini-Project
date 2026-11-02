@@ -48,7 +48,7 @@ Giới hạn: độ linh hoạt vẫn phụ thuộc các mẫu/ngữ liệu đư
 
 - [x] Thêm case đa lượt tái hiện ảnh demo: thông tin không nhãn, gửi bổ sung từng trường, gửi lại cả yêu cầu và câu trả lời mơ hồ (`artifacts/chatbot_baseline_cases.json`).
 - [x] Bổ sung case intent gần nhau, phủ định, câu hỏi mixed, nhiều sản phẩm/variant, số lượng viết tắt, prompt injection.
-- [x] Viết bộ kiểm thử unit & integration `tests/test_chatbot.py` (12/12 PASS bao gồm truy vấn tồn kho/sản phẩm tự nhiên, địa chỉ không nhãn Street, out-of-stock biến thể và loại bỏ nhắc demo) và runner `eval/run_chatbot_evaluation.py` (100% Accuracy).
+- [x] Viết bộ kiểm thử unit & integration `tests/test_chatbot.py` (14/14 PASS bao gồm truy vấn tồn kho/sản phẩm tự nhiên, hỏi giảm giá/chiết khấu, tìm kiếm catalog tiếng Việt, out-of-stock biến thể và loại bỏ toàn bộ cảnh báo demo) và runner `eval/run_chatbot_evaluation.py` (100% Accuracy).
 - [x] Bảo toàn 100% bộ kiểm thử kế thừa (14/14 PASS tại `eval/run_evaluation.py`).
 - [x] Chỉ log metadata cần thiết; không ghi raw message, số điện thoại, tên hoặc địa chỉ vào báo cáo evaluation/runtime log.
 

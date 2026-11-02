@@ -18,7 +18,9 @@ Dự án nối RAG vào trợ lý thương mại điện tử hiện có và gi�
 
 1. **AI Chatbot Thông minh & Linh hoạt (P0, P1, P2)**:
    - Xóa bỏ sự phụ thuộc vào nhãn tiền tố: Khách nhắn tự nhiên *"An, 0901234567, 123 Lê Lợi Q1"* hoặc *"Demo Street"*, bot tự động bóc tách đúng Tên, SĐT và Địa chỉ.
-   - Loại bỏ hoàn toàn câu nhắc nhở gây khó chịu *"Chỉ dùng thông tin giả cho demo nhé."* khi hướng dẫn tạo đơn hàng.
+   - Loại bỏ hoàn toàn câu nhắc nhở demo gây phiền toái trên toàn bộ ứng dụng (frontend storefront, modal đặt hàng, placeholder và phản hồi chatbot).
+   - Xử lý câu hỏi giảm giá / chiết khấu (Issue 11): Tính toán chính xác tổng tiền đơn hàng và phản hồi rõ ràng chính sách niêm yết, loại bỏ hoàn toàn việc lặp lại danh sách giá thừa.
+   - Chuẩn hóa tìm kiếm sản phẩm tiếng Việt (Issue 12): Tích hợp bộ chuẩn hóa Unicode và lọc không dấu/có dấu giúp tìm kiếm chính xác các từ khóa *"áo thun"*, *"áo"*, *"bình"*, *"cà phê"* trên thanh tìm kiếm storefront.
    - Cơ chế Disambiguation: Loại bỏ thông tin liên hệ khỏi câu chat trước khi đối chiếu Catalog SQLite, chống nhầm lẫn tên người hoặc tên đường phố thành sản phẩm.
    - Nhận diện tồn kho, tìm kiếm sản phẩm và phân loại tự nhiên: Xử lý mượt mà các mẫu câu *"Shop có áo thun xanh không"*, *"Shop còn những loại cà phê nào"*, *"Tôi đang tìm cà phê"*.
    - Xử lý thông minh khi sản phẩm hoặc phân loại không tồn tại: Thông báo lịch thiệp sản phẩm chưa có (*"Shop có áo khoác không"*), hoặc phân tích cụ thể khi thuộc tính xung đột (*"Bình Xanh bạc hà 750ml"*).
@@ -41,7 +43,7 @@ Toàn bộ các bộ kiểm thử được chạy độc lập trên database SQ
 | Bộ kiểm thử | Số ca chạy | Kết quả đạt | Tỷ lệ thành công |
 | :--- | :---: | :---: | :---: |
 | **Chatbot Multi-turn Evaluation** (`eval/run_chatbot_evaluation.py`) | 9 | 9 | **100.0%** |
-| **Chatbot Unit & Integration Tests** (`tests/test_chatbot.py`) | 12 | 12 | **100.0%** |
+| **Chatbot Unit & Integration Tests** (`tests/test_chatbot.py`) | 14 | 14 | **100.0%** |
 | **RAG Evaluation Suite** (`eval/run_rag_evaluation.py`) | 20 | 20 | **100.0%** (Route/Status) |
 | **RAG Unit & Security Tests** (`tests/test_rag.py`) | 10 | 10 | **100.0%** |
 | **Inherited E-commerce Suite** (`eval/run_evaluation.py --provider fake`) | 14 | 14 | **100.0%** |

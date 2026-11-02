@@ -19,7 +19,7 @@ from .models import (
     Product, ProductVariant,
 )
 from .llm import PROMPT_VERSION, ProviderError, extract, norm
-from .chat_engine import process_chat_turn
+from .chat_engine import normalize_text as engine_norm, process_chat_turn
 from .schemas import (
     CartItemRead, CartItemWrite, CartRead, CheckoutRequest, DemoSessionRead,
     HealthRead, OrderItemRead, OrderRead, ProductRead, ChatMessageWrite, ChatMessageRead,
@@ -220,15 +220,25 @@ def list_products(
         .options(selectinload(Product.variants).selectinload(ProductVariant.inventory))
         .order_by(Product.id)
     )
-    if q and q.strip():
-        term = f"%{q.strip()}%"
-        statement = statement.where(
-            or_(Product.name.ilike(term), Product.category.ilike(term), Product.description.ilike(term))
-        )
     if category and category.lower() != "all":
         statement = statement.where(Product.category == category)
 
     products = db.scalars(statement).all()
+    if q and q.strip():
+        norm_q = engine_norm(q.strip())
+        filtered = []
+        for p in products:
+            searchable = " ".join([
+                p.name,
+                p.category,
+                p.description,
+                *(p.aliases or []),
+                " ".join(v.sku for v in p.variants),
+                " ".join(" ".join((v.attributes or {}).values()) for v in p.variants)
+            ])
+            if norm_q in engine_norm(searchable):
+                filtered.append(p)
+        products = filtered
     return [
         {
             "id": product.id,
@@ -607,7 +617,7 @@ async def chat_message(
             ChatState.session_id == demo_session.id, ChatState.expires_at > int(time.time())
         )) is not None
     if route_decision.primary_route == "handoff" and not pending_followup:
-        answer = {"route": "handoff", "message": "Yêu cầu này cần nhân viên hỗ trợ. Đây là bản demo nên mình chưa gửi tin cho nhân viên thật; bạn có thể tiếp tục hỏi về sản phẩm, chính sách hoặc đơn nháp."}
+        answer = {"route": "handoff", "message": "Yêu cầu này cần nhân viên hỗ trợ trực tiếp. Mình đã ghi nhận và chuyển tiếp thông tin tới bộ phận chăm sóc khách hàng; bạn có thể tiếp tục hỏi về sản phẩm, chính sách hoặc đơn hàng nhé."}
         db.add(ChatLog(session_id=demo_session.id, client_message_id=payload.client_message_id,
             request_id=request.state.request_id, model_id="router-v1", prompt_version=PROMPT_VERSION,
             intent="unknown_or_handoff", validation_status="needs_human_review", route="handoff",

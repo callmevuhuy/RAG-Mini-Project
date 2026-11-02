@@ -562,11 +562,37 @@ async def process_chat_turn(
                     }
 
         if intent == "check_price":
-            prices = [f"{v.unit_price:,}₫" for v in ([variant] if variant else product.variants)]
+            is_discount_query = any(k in norm_msg for k in ("giam gia", "chiet khau", "bot", "ma giam gia", "voucher", "uu dai"))
+            if is_discount_query:
+                if variant:
+                    v_desc = f"{product.name} ({', '.join(variant.attributes.values())})"
+                    if quantity and quantity > 1:
+                        total = quantity * variant.unit_price
+                        msg = f"{v_desc} hiện có giá niêm yết {variant.unit_price:,}₫/chiếc (tổng {quantity} chiếc là {total:,}₫). Hiện shop bán đúng giá niêm yết và chưa áp dụng giảm giá thêm cho số lượng này bạn nhé."
+                    else:
+                        msg = f"{v_desc} hiện có giá niêm yết {variant.unit_price:,}₫. Hiện shop bán đúng giá niêm yết và chưa áp dụng chương trình giảm giá bạn nhé."
+                else:
+                    unique_prices = sorted(list(set(v.unit_price for v in product.variants)))
+                    p_str = f"{unique_prices[0]:,}₫" if len(unique_prices) == 1 else f"từ {unique_prices[0]:,}₫ đến {unique_prices[-1]:,}₫"
+                    msg = f"Hiện shop bán đúng giá niêm yết ({p_str} tùy phân loại) và chưa áp dụng chương trình giảm giá cho {product.name} bạn nhé."
+                return {
+                    "route": "answer",
+                    "intent": intent,
+                    "message": msg
+                }
+
+            if variant:
+                return {
+                    "route": "answer",
+                    "intent": intent,
+                    "message": f"{product.name} ({', '.join(variant.attributes.values())}) có giá {variant.unit_price:,}₫."
+                }
+            unique_prices = sorted(list(set(v.unit_price for v in product.variants)))
+            p_str = f"{unique_prices[0]:,}₫" if len(unique_prices) == 1 else f"từ {unique_prices[0]:,}₫ đến {unique_prices[-1]:,}₫"
             return {
                 "route": "answer",
                 "intent": intent,
-                "message": f"{product.name} có giá {', '.join(prices)}" + ("." if variant else " tùy phân loại. Bạn muốn xem phân loại nào?")
+                "message": f"{product.name} có giá {p_str} tùy phân loại. Bạn muốn xem phân loại nào?"
             }
         elif intent == "check_stock":
             if variant:
@@ -755,5 +781,5 @@ async def process_chat_turn(
     return {
         "route": "handoff",
         "intent": intent,
-        "message": "Yêu cầu này cần nhân viên hỗ trợ. Đây là bản demo nên mình chưa gửi tin cho nhân viên thật; bạn có thể tiếp tục hỏi về giá, tồn kho hoặc đơn nháp."
+        "message": "Yêu cầu này cần nhân viên hỗ trợ trực tiếp. Mình đã ghi nhận và chuyển tiếp thông tin tới bộ phận chăm sóc khách hàng; bạn có thể tiếp tục hỏi về sản phẩm, chính sách hoặc đơn hàng nhé."
     }

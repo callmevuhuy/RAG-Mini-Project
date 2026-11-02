@@ -255,5 +255,46 @@ class TestChatbotIntegration(unittest.TestCase):
         self.assertIn("số lượng", r2.json()["message"])
         self.assertNotIn("Chỉ dùng thông tin giả cho demo nhé", r2.json()["message"])
 
+    def test_discount_inquiry_for_order(self):
+        """Khách hỏi giảm giá khi mua 3 áo thun trắng size M -> trả lời rõ ràng không lặp giá (Issue 11)."""
+        res = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Tôi muốn mua 3 áo thun trắng, size M thì có giảm giá không",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["route"], "answer")
+        msg = res.json()["message"]
+        self.assertIn("199,000₫/chiếc", msg)
+        self.assertIn("597,000₫", msg)
+        self.assertIn("giảm giá", msg)
+        # Tuyệt đối không lặp lại chuỗi giá thừa
+        self.assertNotIn("199,000₫, 199,000₫", msg)
+
+    def test_vietnamese_accent_insensitive_product_search(self):
+        """Tìm kiếm catalog API chuẩn hóa tiếng Việt, không phân biệt hoa thường hay có/không dấu (Issue 12)."""
+        # Tìm 'áo thun'
+        r1 = self.client.get("/api/v1/products?q=áo thun", headers={"Origin": self.origin})
+        self.assertEqual(r1.status_code, 200)
+        names1 = [p["name"] for p in r1.json()]
+        self.assertIn("Áo thun basic cotton", names1)
+
+        # Tìm 'áo'
+        r2 = self.client.get("/api/v1/products?q=áo", headers={"Origin": self.origin})
+        self.assertEqual(r2.status_code, 200)
+        names2 = [p["name"] for p in r2.json()]
+        self.assertIn("Áo thun basic cotton", names2)
+
+        # Tìm 'bình'
+        r3 = self.client.get("/api/v1/products?q=bình", headers={"Origin": self.origin})
+        self.assertEqual(r3.status_code, 200)
+        names3 = [p["name"] for p in r3.json()]
+        self.assertIn("Bình giữ nhiệt Everyday", names3)
+
+        # Tìm 'cà phê'
+        r4 = self.client.get("/api/v1/products?q=cà phê", headers={"Origin": self.origin})
+        self.assertEqual(r4.status_code, 200)
+        names4 = [p["name"] for p in r4.json()]
+        self.assertIn("Cà phê rang xay Đà Lạt", names4)
+
 if __name__ == "__main__":
     unittest.main()

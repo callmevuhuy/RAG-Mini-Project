@@ -9,7 +9,7 @@ Mở rộng trợ lý thương mại LLM kế thừa bằng ingestion tài liệ
 | Giai đoạn | Trạng thái | Bằng chứng / giới hạn |
 |---|---|---|
 | Baseline LLM và tích hợp | Hoàn tất cho demo | FastAPI, React, SQLite, luồng giỏ hàng/đơn, Fake provider; legacy eval chạy 14/14 sau cập nhật router. |
-| Nâng cấp AI Chatbot (P0, P1, P2) | Hoàn tất cho demo | Module `backend/app/chat_engine.py` bóc tách thực thể không nhãn (hỗ trợ cả street address), gom slot đa lượt, bảo toàn số lượng khi lặp tên sản phẩm, hủy đơn pending tức thì, xử lý tự nhiên các câu hỏi tồn kho/sản phẩm (Issue 2..10) và loại bỏ dòng nhắc thông tin giả. Đạt 12/12 unit tests và 9/9 chatbot eval cases (100%). |
+| Nâng cấp AI Chatbot (P0, P1, P2) | Hoàn tất cho demo | Module `backend/app/chat_engine.py` bóc tách thực thể không nhãn (hỗ trợ cả street address), gom slot đa lượt, bảo toàn số lượng khi lặp tên sản phẩm, hủy đơn pending tức thì, xử lý tự nhiên các câu hỏi tồn kho/sản phẩm (Issue 2..10), giải đáp chiết khấu/giảm giá (Issue 11), tìm kiếm sản phẩm tiếng Việt có dấu/không dấu (Issue 12) và loại bỏ toàn bộ cảnh báo demo trong ứng dụng. Đạt 14/14 unit tests và 9/9 chatbot eval cases (100%). |
 | Corpus và provenance | Hoàn tất cho corpus mẫu | 12 tài liệu, 31 chunks, public/staff/admin; manifest bắt buộc metadata và từ chối đường dẫn ra ngoài corpus. |
 | Ingestion và index | Một phần | Chunk Markdown H2, vector hashed word/character n-gram TF, bundle có SHA-256 và metadata. Có retrieval offline nhưng chưa dùng semantic neural embedding model, nên mục tiêu embedding chất lượng ngữ nghĩa sâu chưa hoàn tất. |
 | Permission-aware RAG | Hoàn tất cho demo cục bộ | Lọc role trước xếp hạng; staff/admin cần token backend cấu hình. Token không đồng nghĩa với SSO hay danh tính người dùng doanh nghiệp. |
