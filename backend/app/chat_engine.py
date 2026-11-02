@@ -245,6 +245,13 @@ def extract_cancellation(text: str) -> bool:
 # 4. BỘ ĐỐI CHIẾU DANH MỤC & BIẾN THỂ (CATALOG & VARIANT RESOLUTION)
 # ==============================================================================
 
+# Danh sách các trang phục / phụ kiện loại trừ (không bán tại shop) để tránh nhận diện nhầm từ "áo" (Issue 13, 14)
+EXCLUDED_GARMENTS = (
+    "ao khoac", "ao so mi", "ao len", "ao mua", "ao vest", "ao polo",
+    "quan", "quan jean", "quan tay", "quan short", "giay", "dep", "non", "mu"
+)
+
+
 def resolve_catalog_candidates(
     search_text: str,
     active_products: list[Product]
@@ -252,18 +259,28 @@ def resolve_catalog_candidates(
     """Tìm kiếm sản phẩm trong danh mục database SQLite theo tên hoặc alias.
 
     Sử dụng search_text đã loại trừ thông tin liên lạc để tránh đối chiếu sai lệch.
+    Hỗ trợ nhận diện cách gọi đời thường của khách hàng (ví dụ 'áo trắng', 'áo màu xanh' -> Áo thun basic cotton).
     """
     norm_query = normalize_text(search_text)
     candidates = []
 
+    # Kiểm tra xem câu chat có chứa từ "áo" hợp lệ (không thuộc danh mục bị loại trừ)
+    has_excluded_garment = any(ex in norm_query for ex in EXCLUDED_GARMENTS)
+    has_ao_word = bool(re.search(r"\bao\b", norm_query)) and not has_excluded_garment
+
     # Từ khóa mở rộng an toàn đặc thù từng sản phẩm trong danh mục
     PRODUCT_SHORT_KEYWORDS = {
-        "Áo thun basic cotton": ["ao thun", "ao basic", "ao cotton"],
+        "Áo thun basic cotton": ["ao thun", "ao basic", "ao cotton", "ao phong", "cai ao", "chiec ao"],
         "Bình giữ nhiệt Everyday": ["binh giu nhiet", "binh nuoc", "binh inox", "binh everyday", "binh"],
         "Cà phê rang xay Đà Lạt": ["ca phe", "cafe", "coffee", "rang xay"]
     }
 
     for product in active_products:
+        # Nếu khách gọi chung là "áo" hoặc "áo trắng", "áo màu xanh" và shop chỉ có duy nhất 1 dòng áo thun
+        if product.name == "Áo thun basic cotton" and has_ao_word:
+            candidates.append(product)
+            continue
+
         names = [product.name, *(product.aliases or [])]
         extra_keywords = PRODUCT_SHORT_KEYWORDS.get(product.name, [])
         all_terms = names + extra_keywords
@@ -316,12 +333,12 @@ def resolve_variant(
         if all(v_attrs.get(k) == val for k, val in accumulated_attrs.items()):
             matching_variants.append(v)
 
-    # Nếu chỉ còn đúng 1 biến thể duy nhất và đã đủ tất cả thuộc tính của biến thể đó
-    if len(matching_variants) == 1:
+    # Nếu chỉ còn đúng 1 biến thể duy nhất và người dùng đã cung cấp thuộc tính nhận diện (Issue 15)
+    # Ví dụ: Bình giữ nhiệt màu đen chỉ có duy nhất 1 biến thể (Đen, 750ml), không bắt khách xác nhận lặp lại
+    if len(matching_variants) == 1 and accumulated_attrs:
         matched = matching_variants[0]
-        # Đảm bảo đã chọn đủ số lượng thuộc tính yêu cầu của biến thể
-        if len(accumulated_attrs) >= len(matched.attributes or {}):
-            return matched, accumulated_attrs
+        full_attrs = dict(matched.attributes or {})
+        return matched, full_attrs
 
     return None, accumulated_attrs
 
@@ -388,6 +405,12 @@ async def process_chat_turn(
                         pending_has_variant_match = True
                         break
 
+    # Nhận diện phản hồi đồng thuận / xác nhận (Affirmation - Issue 15)
+    is_affirmation = any(
+        re.search(rf"\b{re.escape(k)}\b", norm_msg)
+        for k in ("yes", "yep", "ok", "oke", "dung roi", "chinh xac", "chinh no", "dong y", "chot", "dung")
+    )
+
     if any(k in norm_msg for k in ("nhan vien", "gap nguoi", "ho tro truc tiep", "khieu nai")):
         intent = "unknown_or_handoff"
     elif any(k in norm_msg for k in ("sua don", "doi don", "cap nhat don", "tang so luong", "giam so luong")):
@@ -398,8 +421,8 @@ async def process_chat_turn(
         intent = "check_price"
     elif any(k in norm_msg for k in ("dat mua", "dat hang", "muon dat", "muon mua", "toi muon mua", "minh muon mua", "muon lay", "dat ", "mua ", "chot ", "lay ", "cho toi", "cho minh", "them vao don")):
         intent = "create_order"
-    elif pending and (contact.phone or contact.name or contact.address or quantity or pending_has_variant_match):
-        # Nếu đang có pending order và người dùng gửi thông tin bổ sung (kể cả chọn biến thể) -> tiếp tục luồng tạo đơn
+    elif pending and (contact.phone or contact.name or contact.address or quantity or pending_has_variant_match or is_affirmation):
+        # Nếu đang có pending order và người dùng gửi thông tin bổ sung (kể cả chọn biến thể hoặc xác nhận) -> tiếp tục luồng tạo đơn
         intent = "create_order"
     else:
         intent = "unknown_or_handoff"
@@ -642,6 +665,17 @@ async def process_chat_turn(
             pending["address"] = contact.address
 
         # 1. Kiểm tra phân loại sản phẩm (variant)
+        # Nếu khách xác nhận đồng thuận (yes/ok/đúng rồi) và danh sách lựa chọn phù hợp chỉ có 1 biến thể -> chốt biến thể đó ngay
+        if variant is None and is_affirmation and pending.get("product_id"):
+            matching_opts = [
+                v for v in product.variants
+                if all(v.attributes.get(k) == val for k, val in accumulated_attrs.items())
+            ] if accumulated_attrs else product.variants
+            if len(matching_opts) == 1:
+                variant = matching_opts[0]
+                accumulated_attrs = dict(variant.attributes or {})
+                pending["variant_attributes"] = accumulated_attrs
+
         if variant is None:
             # Lưu state để chờ khách chọn phân loại
             if state is None:

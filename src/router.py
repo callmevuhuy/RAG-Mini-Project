@@ -33,7 +33,9 @@ ORDER_ACTION_PATTERNS = [
     r"\b(?:toi\s+|minh\s+)?muon\s+lay\b",
     r"\bmua\s+(?:ngay|lien)\b",
     r"\bdat\s+(?:ngay|lien)\b",
-    r"\bcho\s+(?:toi|minh)\s+(?:mua|dat|lay)\b"
+    r"\bcho\s+(?:toi|minh)\s+(?:mua|dat|lay)\b",
+    # Mẫu từ khóa xác nhận đa lượt (Affirmation - Issue 15)
+    r"\b(?:yes|yep|ok|oke|dung\s+roi|dong\s+y|chinh\s+no|chinh\s+xac)\b"
 ]
 
 ORDER_READ_PATTERNS = [
@@ -48,7 +50,11 @@ ORDER_READ_PATTERNS = [
     r"\b(?:co|con)\s+(?:nhung|cac)\s+loai\b",
     r"\b(?:co|con)\s+loai\s+nao\b",
     r"\b(?:dang\s+)?tim\s+(?:mua\s+|kiem\s+)?(?:ao|binh|ca\s+phe|hang|san\s+pham)\b",
-    r"\b(?:dang\s+)?tim\s+(?:ao|binh|ca\s+phe)\b"
+    r"\b(?:dang\s+)?tim\s+(?:ao|binh|ca\s+phe)\b",
+    # Mẫu đề cập tên sản phẩm ngắn gọn trong hội thoại (Issue 13, Issue 14)
+    r"\b(?:ao\s+thun|ao\s+basic|ao\s+cotton)\b",
+    r"\b(?:binh\s+giu\s+nhiet|binh\s+everyday)\b",
+    r"\b(?:ca\s+phe\s+da\s+lat|ca\s+phe\s+rang\s+xay)\b"
 ]
 
 HANDOFF_PATTERNS = [

@@ -296,5 +296,64 @@ class TestChatbotIntegration(unittest.TestCase):
         names4 = [p["name"] for p in r4.json()]
         self.assertIn("Cà phê rang xay Đà Lạt", names4)
 
+
+    def test_issue13_colloquial_apparel_order_and_multi_turn(self):
+        """Khách gọi 'áo trắng size M' (bỏ từ 'thun') -> hệ thống nhận diện đúng Áo thun basic cotton và gom slot đa lượt (Issue 13)."""
+        # Turn 1: 'Tôi muốn mua 2 cái áo trắng size M'
+        r1 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Tôi muốn mua 2 cái áo trắng size M",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.json()["route"], "needs_information")
+        self.assertIn("Áo thun basic cotton", r1.json()["message"])
+        self.assertIn("2", r1.json()["message"])
+
+        # Turn 2: Cung cấp thông tin nhận hàng
+        r2 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Nguyễn Văn An, 0912345678, 123 Lê Duẩn, Hà Nội",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["route"], "pending_confirmation")
+        self.assertIn("2 × Áo thun basic cotton", r2.json()["message"])
+
+    def test_issue14_colloquial_apparel_stock_query(self):
+        """Khách hỏi 'Shop còn áo màu xanh không?' -> trả lời chính xác tồn kho Áo thun basic cotton (Xanh, M) (Issue 14)."""
+        r = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Shop còn áo màu xanh không?",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["route"], "answer")
+        msg = r.json()["message"]
+        self.assertIn("Áo thun basic cotton", msg)
+        self.assertIn("Xanh, M", msg)
+        self.assertIn("12", msg)
+        # Không báo thiếu sản phẩm
+        self.assertNotIn("chưa có sản phẩm này", msg)
+
+    def test_issue15_unique_variant_no_clarification_loop(self):
+        """Thuộc tính màu đen của Bình giữ nhiệt Everyday là duy nhất (750ml) -> không lặp vòng hỏi làm phiền khách (Issue 15)."""
+        # Turn 1: 'Mình muốn đặt 3 cái bình giữ nhiệt màu đen'
+        r1 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Mình muốn đặt 3 cái bình giữ nhiệt màu đen",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.json()["route"], "needs_information")
+        # Đã tự động nhận diện phân loại Đen, 750ml và hỏi thông tin người nhận
+        self.assertIn("Bình giữ nhiệt Everyday (Đen, 750ml)", r1.json()["message"])
+        self.assertIn("3", r1.json()["message"])
+
+        # Turn 2: Khách xác nhận và gửi thông tin nhận hàng
+        r2 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Yes, giao cho Trần Bình, 0987654321, 456 Hai Bà Trưng, Quận 3",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["route"], "pending_confirmation")
+        self.assertIn("3 × Bình giữ nhiệt Everyday", r2.json()["message"])
+
 if __name__ == "__main__":
     unittest.main()

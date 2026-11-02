@@ -11,7 +11,7 @@ Dự án mở rộng từ trợ lý thương mại LLM kế thừa, bổ sung tr
   - Hỗ trợ số lượng và biến thể tự nhiên theo thói quen người Việt (*"2c"*, *"2 cái"*, *"chốt 2"*...).
   - Quản lý máy trạng thái đa lượt: không bị ghi đè mất số lượng khi khách nhắc lại sản phẩm, gom slot lũy tiến và xử lý lệnh hủy/đổi ý (`cancel_pending`) an toàn.
   - Phân tách thực thể khỏi câu chat trước khi đối chiếu Catalog SQLite, chống nhầm lẫn tên người hoặc tên đường thành sản phẩm.
-- **Kiểm thử tái lập**: Đạt **100%** trên toàn bộ các bộ kiểm thử: 8/8 Chatbot unit/integration tests, 9/9 Chatbot multi-turn evaluation cases, 10/10 RAG tests, 20/20 RAG eval cases, và 14/14 Inherited e-commerce cases.
+- **Kiểm thử tái lập**: Đạt **100%** trên toàn bộ các bộ kiểm thử: 17/17 Chatbot unit/integration tests, 9/9 Chatbot multi-turn evaluation cases, 10/10 RAG tests, 20/20 RAG eval cases, và 14/14 Inherited e-commerce cases.
 
 ## Hướng dẫn tái hiện Project (Chạy Local)
 
