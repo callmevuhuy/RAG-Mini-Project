@@ -1,6 +1,6 @@
 # Báo cáo Project RAG — AI Live Commerce Order Assistant
 
-**Ngày cập nhật:** 30/10/2026
+**Ngày cập nhật:** 02/11/2026
 **Phạm vi:** trạng thái code, tài liệu và kết quả kiểm tra hiện có; không kiểm tra Ollama.
 
 ## 1. Project này dùng để làm gì?
@@ -64,25 +64,33 @@ Router
 | Phân quyền | **Đạt ở mức demo cục bộ** | Pre-filter trước ranking; backend yêu cầu role token cho staff/admin. Chưa phải hệ thống xác thực doanh nghiệp. |
 | Grounding/citation | **Một phần** | Có citation resolve được tới chunk/metadata; đã sửa một lỗi chọn nhầm tài liệu đổi trả/giao hàng. Câu trả lời vẫn có heuristic templates và chưa qua human claim review. |
 | Tích hợp UI/API | **Đạt ở mức demo** | Có knowledge/order/mixed/handoff, citation và thao tác re-index. Đánh giá mixed tự động hiện chưa chứng minh end-to-end action correctness cho từng case. |
-| Evaluation | **Một phần** | Có 20 case, split dev/test và các metric cơ bản. Claim-support là string proxy; báo cáo chưa có human review và failure analysis đủ sâu theo tối thiểu 5 case/layer. |
-| Re-index/rollback | **Đã triển khai; nghiệm thu một phần** | Có bundle v1.0/v1.1, pointer nguyên tử và audit event. Đã kiểm tra API activation/reload với môi trường tạm; chưa có kiểm soát đa host hoặc đo tải/độ trễ sản xuất. |
+| Evaluation | **Đạt kiểm tra hồi quy; chưa đạt xác nhận độc lập** | Có 21 case đủ nhóm, phân tích 6 near-miss và tuning trên dev. Test split đã bị tham vấn qua MC-03; V2–V13 holdout cũng được dùng lặp lại trong tuning. V13 đạt metric retrieval, fact/citation lexical support và routing 100%, nhưng không phải blind holdout. Chưa có human claim review. |
+| Re-index/rollback | **Đạt cho API demo** | TestClient cô lập xác nhận activate v1.1, reload/status và citation policy 14 ngày; rollback v1.0 về 07 ngày; kiểm tra 403 và audit. Chưa có kiểm soát đa host hoặc đo tải/độ trễ sản xuất. |
 | Demo/tài liệu | **Một phần** | README, architecture, workflow, evaluation/re-index reports và demo script có; một số bước demo cần chạy lại sau thay đổi câu trả lời để xác nhận đúng UI thực tế. |
 
 ## 6. Kết quả kiểm tra được ghi nhận
 
+**Cập nhật 02/11/2026:** bộ chạy mới nhất gồm 29/29 RAG tests, 23/23 chatbot integration tests, chatbot eval 9/9, inherited Fake eval 14/14, và frontend build thành công. RAG all-21 đạt Hit@3 100%, Recall@5 97.92%, MRR 0.9688, fact match 96.43%; V13 regression holdout (20) sau khi sửa hai near-miss đạt Hit@3/Recall@5, MRR, fact/citation lexical support và routing/safety 100%. V13 được tạo sau các vòng tuning nên không phải blind holdout. Mixed action intent chỉ đánh giá router; API tests riêng xác nhận order/idempotency/no-write/inventory/reindex. Chưa có human claim-by-claim review.
+
 | Lệnh/kiểm tra | Kết quả gần nhất |
 |---|---:|
-| `python -m unittest tests/test_rag.py -v` | 10/10 passed |
-| RAG evaluation — toàn bộ 20 case | Hit@3 100%; Recall@5 93.89%; MRR 0.9000 |
+| `python -m unittest tests/test_rag.py -v` | 29/29 passed |
+| `python -m unittest tests/test_chatbot.py -v` | 23/23 passed |
+| Chatbot evaluation | 9/9 passed |
+| RAG evaluation — toàn bộ 21 case | Hit@3 100%; Recall@5 97.92%; MRR 0.9688 |
 | Route/status expected-match | 100% / 100% trên authored set |
 | Citation metadata + role eligibility | 100% resolve trong evaluator hiện tại |
-| Claim-support string proxy | 70% toàn bộ; Dev 70%; Test 70% |
+| Expected-answer fact string match | 96.43% overall; Dev 92.31%; Test 100% |
+| Retrieved / cited evidence lexical coverage | 100% / 96.43% overall; Dev 100% / 92.31%; Test 100% / 100% |
+| Holdout regression V13 (20 cases) | Hit@3/Recall@5 100%; MRR 1.0; fact/citation lexical support 100%; route/status/safety 100% |
 | Safe abstention / access denied | 100% / 100% trên case tương ứng |
+| Mixed route/query split/action-intent | 100% / 100% / 100%; intent is router classification only |
+| Mixed API integration | Mixed shirt/coffee orders, idempotent replay, missing recipient/out-of-stock no-write, live inventory read, prompt injection and re-index rollback verified |
 | Legacy Fake flow | 14/14; API smoke và các security probes trong runner đạt |
-| Frontend `npm run build` | Thành công |
+| Frontend `npm run build` | Thành công (Vite 8.3.4) |
 | Probe API bổ sung | Role admin giả không token bị 403; re-index thiếu token bị 403; token hợp lệ được chấp nhận; CORS preflight 200 |
 
-Các kết quả này xác nhận hành vi trên bộ dữ liệu demo đã viết. Chúng không chứng minh chất lượng production: evaluator kiểm tra chuỗi kỳ vọng cho claim support, citation resolve kiểm tra định danh/metadata, và bộ case chỉ có 20 câu.
+Các kết quả này xác nhận hành vi trên các bộ kiểm thử demo và hồi quy. Chúng không chứng minh chất lượng production: evaluator kiểm tra chuỗi kỳ vọng cho claim support, citation resolve kiểm tra định danh/metadata. Holdout V13 được tạo sau các vòng tuning nên không thể dùng để khẳng định tổng quát hóa; cũng chưa có human claim-by-claim review.
 
 ## 7. Đối chiếu với guiding docs
 
@@ -97,21 +105,21 @@ Nguồn đối chiếu chính là [`Project_RAG_Requirements.pdf`](Project_RAG_R
 | Embedding tương thích cho query/document và đáp ứng tra cứu ngữ nghĩa | **Chưa đạt đầy đủ**; hiện mới là hashed lexical vectorizer, chưa có semantic model và đánh giá paraphrase độc lập đủ mạnh. |
 | Role pre-filter trước ranking/context/citation | **Đạt trong code path đã kiểm tra**; staff/admin demo roles được bảo vệ bằng token backend, nhưng chưa có user identity/SSO hay multi-tenant policy. |
 | Xử lý empty/no-candidate/index lỗi, no-evidence, access-denied và câu hỏi mâu thuẫn | **Một phần**; no-evidence/access-denied có case; xử lý evidence mâu thuẫn và lỗi index qua API/UI chưa được đánh giá toàn diện. |
-| Claim quan trọng chỉ được nói khi có evidence và citation hỗ trợ | **Một phần**; citation resolve tốt nhưng chỉ 70% expected strings xuất hiện và chưa có reviewer gán supported/partial/unsupported/contradicted/unverifiable. |
-| Mixed query tách tri thức và action, action qua validation cũ | **Đạt một phần**; router/UI có luồng mixed, nhưng metric mixed chỉ kiểm tra route+citation chứ chưa thực thi mỗi action case qua API trong RAG evaluator. |
-| Tối thiểu 20 case, đủ 7 nhóm, dev/test, đo retrieval/safety/access/mixed | **Đạt mức tối thiểu về số lượng và nhóm**; metrics đã có, song evidence coverage, false refusal và human claim review còn thiếu/đơn giản. |
-| Phân tích ít nhất 5 lỗi/near-miss theo các tầng và cải tiến có kiểm soát | **Chưa chứng minh đủ**; đã sửa một số lỗi ranking/routing/grounding, nhưng báo cáo hiện thiếu bảng case-by-case có nguyên nhân, layer, thay đổi và kết quả trước/sau cho ít nhất 5 lỗi. |
-| Re-index 1.0→1.1, xác minh version, activate, rollback, audit an toàn | **Đạt một phần**; API pointer và audit có, version switching đã thử bằng DB/pointer tạm; cần bổ sung regression test tự động cho answer/citation 7→14→7 ngày và concurrency. |
+| Claim quan trọng chỉ được nói khi có evidence và citation hỗ trợ | **Một phần**; multi-source path đã được sửa để cite chunk nguồn cho từng claim, evaluator kiểm tra lexical support. Chưa có human entailment review theo rubric. |
+| Mixed query tách tri thức và action, action qua validation cũ | **Đạt một phần với API integration**; đã chạy luồng tạo đơn hỗn hợp, đọc tồn kho trực tiếp, thiếu dữ liệu/thiếu hàng không ghi, idempotency và prompt injection. Không chạy end-to-end mọi case offline. |
+| Tối thiểu 20 case, đủ 7 nhóm, dev/test, đo retrieval/safety/access/mixed | **Đạt hình thức, chưa đạt phương pháp độc lập**; đủ case/nhóm/metric nhưng MC-03 và holdout V2–V13 đã được tham vấn trong tuning. Cần blind test mới sau khi đóng băng code. |
+| Phân tích ít nhất 5 lỗi/near-miss theo các tầng và cải tiến có kiểm soát | **Đạt về phân tích và thử trên dev**; có 6 case, nguyên nhân/tầng/sửa đổi/kết quả ghi tại `artifacts/evaluation_report.md`. Test set hiện hữu đã bị tham vấn cho một sửa lỗi grounding. |
+| Re-index 1.0→1.1, xác minh version, activate, rollback, audit an toàn | **Đạt cho API demo**; kiểm thử cô lập tự động xác nhận answer/citation 07→14→07 ngày, reload, audit và authorization. Multi-host concurrency vẫn chưa có. |
 | Demo 10–12 phút + Q&A thể hiện các luồng bắt buộc | **Một phần**; script đã có nhưng cần kiểm tra lại từng lời thoại với behavior UI sau các thay đổi mới nhất. |
 
 ## 8. Hạn chế và việc nên làm tiếp
 
 ### Ưu tiên cao
 
-1. **Bổ sung semantic embedding** phù hợp môi trường không dùng Ollama; ghi model/version, encoding/query-document, normalization và cách tái tạo bundle. So sánh với baseline lexical trên dev trước khi đánh giá frozen test.
-2. **Nâng cấp đánh giá grounding:** reviewer chấm từng claim/citation theo supported, partial, unsupported, contradicted hoặc unverifiable; bổ sung evidence coverage, false refusal và citation support rate.
-3. **Viết lại failure analysis có bằng chứng:** ít nhất 5 case ghi rõ lỗi, tầng gây lỗi, nguyên nhân, thay đổi thử trên dev và kết quả trên test.
-4. **Bổ sung integration tests cho RAG API:** mixed knowledge+order, access boundary, citation fields, re-index 1.0→1.1→1.0 và version/citation sau reload.
+1. **Tạo blind test mới** sau khi đóng băng code; không dùng kết quả của nó để tuning trước khi báo cáo.
+2. **Human review grounding:** chấm claim/citation theo supported, partial, unsupported, contradicted hoặc unverifiable; metric lexical hiện tại không thay thế được bước này.
+3. **Cải thiện retrieval ngữ nghĩa nếu chất lượng yêu cầu:** so sánh semantic embedder với lexical baseline trên dev, rồi mới chạy frozen test.
+4. Bổ sung kiểm thử conflict/version policy, lỗi index, tải lớn và UI demo; các API integration chính cho mixed/order/re-index đã có.
 
 ### Trước khi triển khai ngoài demo
 

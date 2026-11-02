@@ -9,12 +9,12 @@ Mở rộng trợ lý thương mại LLM kế thừa bằng ingestion tài liệ
 | Giai đoạn | Trạng thái | Bằng chứng / giới hạn |
 |---|---|---|
 | Baseline LLM và tích hợp | Hoàn tất cho demo | FastAPI, React, SQLite, luồng giỏ hàng/đơn, Fake provider; legacy eval chạy 14/14 sau cập nhật router. |
-| Nâng cấp AI Chatbot (P0, P1, P2) | Hoàn tất cho demo | Module `backend/app/chat_engine.py` bóc tách thực thể không nhãn (hỗ trợ cả street address), gom slot đa lượt, bảo toàn số lượng khi lặp tên sản phẩm, hủy đơn pending tức thì, xử lý tự nhiên câu hỏi tồn kho/sản phẩm (Issue 2..10), giải đáp chiết khấu/giảm giá (Issue 11), tìm kiếm catalog tiếng Việt (Issue 12), nhận diện cách gọi đời thường 'áo trắng/xanh' (Issue 13, 14), tự động chốt biến thể duy nhất và xử lý xác nhận đồng thuận (Issue 15). Đạt 17/17 unit tests và 9/9 chatbot eval cases (100%). |
+| Nâng cấp AI Chatbot (P0, P1, P2) | Hoàn tất cho demo | Module `backend/app/chat_engine.py` bóc tách thực thể không nhãn (hỗ trợ cả street address), gom slot đa lượt, bảo toàn số lượng khi lặp tên sản phẩm, hủy đơn pending tức thì, xử lý tự nhiên câu hỏi tồn kho/sản phẩm (Issue 2..10), giải đáp chiết khấu/giảm giá (Issue 11), tìm kiếm catalog tiếng Việt (Issue 12), nhận diện cách gọi đời thường 'áo trắng/xanh' (Issue 13, 14), tự động chốt biến thể duy nhất và xử lý xác nhận đồng thuận (Issue 15). Đạt 23/23 chatbot unit/integration tests và 9/9 chatbot eval cases (100%). |
 | Corpus và provenance | Hoàn tất cho corpus mẫu | 12 tài liệu, 31 chunks, public/staff/admin; manifest bắt buộc metadata và từ chối đường dẫn ra ngoài corpus. |
 | Ingestion và index | Một phần | Chunk Markdown H2, vector hashed word/character n-gram TF, bundle có SHA-256 và metadata. Có retrieval offline nhưng chưa dùng semantic neural embedding model, nên mục tiêu embedding chất lượng ngữ nghĩa sâu chưa hoàn tất. |
 | Permission-aware RAG | Hoàn tất cho demo cục bộ | Lọc role trước xếp hạng; staff/admin cần token backend cấu hình. Token không đồng nghĩa với SSO hay danh tính người dùng doanh nghiệp. |
 | API/UI | Hoàn tất cho demo | Knowledge, mixed, order và handoff; role token chỉ giữ trong bộ nhớ frontend. API re-index yêu cầu admin token, session và origin hợp lệ. |
-| Evaluation | Đạt toàn bộ các bộ test | 20 RAG cases (100% route/status, 100% citation resolve, 70% claim proxy); 9 Chatbot multi-turn cases (100%); 14/14 inherited fake-flow cases. |
+| Evaluation | Hoàn tất kiểm tra hồi quy cục bộ; còn thiếu holdout độc lập và human review | 21 RAG cases mới nhất: Hit@3 100%, Recall@5 97.92%, MRR 0.9688, citation resolution 100%, expected-answer fact/citation lexical support 96.43%, route/status 100%. Holdout hồi quy V13 (20 case) sau khi sửa 2 near-miss: Hit@3/Recall@5 100%, MRR 1.0, citation resolution/fact/support 100%, routing/safety 100%. MC-03 đã tham vấn khi sửa và V2–V13 được dùng lặp lại trong tuning; V13 không phải blind holdout. Chatbot 9/9; inherited 14/14. |
 | Re-index/rollback | Đã triển khai; cần vận hành kiểm soát | Bundle v1.0/v1.1 đã có; API đổi file con trỏ active bằng replace nguyên tử. Không có distributed lock hoặc kiểm soát đa máy chủ. |
 
 ## Quy tắc làm việc
@@ -30,6 +30,7 @@ Mở rộng trợ lý thương mại LLM kế thừa bằng ingestion tài liệ
 - Header `X-User-Role` là lựa chọn role demo, không phải chứng thực. Staff/admin chỉ được chấp nhận khi token khớp `DEMO_STAFF_TOKEN`/`DEMO_ADMIN_TOKEN` phía backend.
 - Index bundle phải qua checksum và kiểm tra cấu trúc trước khi load. SHA-256 trong cùng file phát hiện hỏng vô ý; nó không chứng minh nguồn gốc trước kẻ có thể sửa cả bundle lẫn hash.
 - Citation phải resolve đúng metadata chunk. Không dùng citation resolution như bằng chứng tự động rằng mọi claim đều đúng.
+- Các metric string của evaluator là proxy lexical; cần human review claim/citation và giữ test split chưa dùng trong quá trình điều chỉnh.
 - Không tự suy đoán hoặc gán mặc định thông tin người nhận hay số lượng đơn hàng nếu khách chưa cung cấp.
 
 ## Lệnh kiểm tra
@@ -45,6 +46,7 @@ python eval/run_chatbot_evaluation.py
 # Chạy kiểm thử RAG Engine
 python -m unittest tests/test_rag.py -v
 python -m eval.run_rag_evaluation --split all
+python -m eval.run_rag_evaluation --split holdout --cases artifacts/evaluation_holdout_v13.jsonl
 
 # Chạy kiểm thử luồng thương mại kế thừa
 python eval/run_evaluation.py --provider fake

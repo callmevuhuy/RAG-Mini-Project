@@ -45,19 +45,21 @@ Toàn bộ các bộ kiểm thử được chạy độc lập trên database SQ
 | Bộ kiểm thử | Số ca chạy | Kết quả đạt | Tỷ lệ thành công |
 | :--- | :---: | :---: | :---: |
 | **Chatbot Multi-turn Evaluation** (`eval/run_chatbot_evaluation.py`) | 9 | 9 | **100.0%** |
-| **Chatbot Unit & Integration Tests** (`tests/test_chatbot.py`) | 17 | 17 | **100.0%** |
-| **RAG Evaluation Suite** (`eval/run_rag_evaluation.py`) | 20 | 20 | **100.0%** (Route/Status) |
-| **RAG Unit & Security Tests** (`tests/test_rag.py`) | 10 | 10 | **100.0%** |
+| **Chatbot Unit & Integration Tests** (`tests/test_chatbot.py`) | 23 | 23 | **100.0%** |
+| **RAG Evaluation Suite** (`eval/run_rag_evaluation.py`) | 21 | 21 | **100.0%** (Route/Status) |
+| **RAG Unit & Security Tests** (`tests/test_rag.py`) | 29 | 29 | **100.0%** |
 | **Inherited E-commerce Suite** (`eval/run_evaluation.py --provider fake`) | 14 | 14 | **100.0%** |
 | **Frontend Production Build** (`npm run build`) | — | — | **SUCCESS** |
 
 ### Chi tiết các chỉ số RAG:
 - **Hit@3**: 100.0%
-- **Recall@5**: 93.89% (Dev: 86.9%, Test: 100%)
-- **MRR**: 0.9000 (Dev: 0.7857, Test: 1.0)
+- **Recall@5**: 97.92% (Dev: 95.24%, Test: 100%)
+- **MRR**: 0.9688 (Dev: 0.9286, Test: 1.0)
 - **Citation Metadata Resolution**: 100.0%
+- **Expected answer fact match / cited evidence lexical support**: 96.43% / 96.43%.
 - **Safe Abstention & Access Denied**: 100.0%
-- **Claim Support Proxy**: 70.0% (đối sánh chuỗi từ khóa expected)
+- **Holdout regression V13 (20 cases)**: Hit@3, Recall@5, citation resolution, fact match, lexical support, routing và safety đạt 100% sau hai regression fixes. V13 đã được dùng khi tuning; không phải blind holdout.
+- Fact/evidence metrics là so khớp chuỗi, không phải entailment review. Test split ban đầu đã được tham vấn qua MC-03; chưa có human claim review hoặc blind evaluation độc lập.
 
 ---
 

@@ -22,4 +22,4 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/rag/reindex?ver
 
 Query “Thời hạn đổi trả hàng là bao nhiêu ngày?” and confirm answer/citation version follows active status: v1.1 should cite the 14-day policy; v1.0 should cite the 07-day policy. API status exposes the active version. The pointer persists selection across process restart on the same host.
 
-The evaluator and API authorization probes were run during takeover; no live UI-assisted version switch was performed in this report. Never infer sub-100ms performance from this implementation without measuring the target environment.
+Automated isolated TestClient coverage activates v1.1, confirms status reload and the 14-day answer/citation, rolls back to v1.0, then confirms the 07-day answer/citation and audit version/count. It also verifies unauthorized requests return 403 and internal documents remain inaccessible to customers. This verifies the API path with an isolated temporary DB and pointer, not a live UI-assisted demonstration or multi-host coordination. Never infer sub-100ms performance without measuring the target environment.

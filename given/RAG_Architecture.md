@@ -5,6 +5,7 @@
 - React/Vite gọi FastAPI; frontend không kết nối SQLite trực tiếp.
 - SQLite là nguồn sự thật cho SKU, giá, tồn kho, session và đơn. RAG chỉ tra cứu tài liệu; order actions vẫn đi qua validation hiện hữu.
 - `src/rag.py` ingest manifest, cắt theo Markdown H2, vector hóa hashed word/character n-gram term frequency và tìm top-k bằng cosine. Đây là lexical retrieval chạy local, không phải semantic embedding. Không cần Ollama cho đường RAG hiện tại.
+- `src/router.py` tách mixed query theo dấu câu và liên từ tiếng Việt có dấu/không dấu. Với một số chủ đề có nhiều điều kiện, retriever thêm từ khóa truy vấn để đưa đúng section vào top-k; riêng câu hỏi vừa hỏi cách vệ sinh vừa hỏi cảnh báo bình giữ nhiệt sẽ trả nội dung từ cả hai chunk và chỉ cite đúng hai nguồn đó. Nếu thiếu một trong hai chunk, route abstains thay vì trả lời một nửa như thể đã đủ evidence.
 
 ## Request flow
 
@@ -38,6 +39,6 @@ Chat and re-index writes validate browser origin. Re-index also requires a valid
 
 ## Answers, citations, and limits
 
-Answers use deterministic topic-specific templates from the local corpus, not an LLM generation call. Topic hints prioritize a matching source and citations are narrowed to that source. This fixes known wrong-source selection for return-policy queries; it is still heuristic and should abstain when evidence does not support the requested facts. The authored claim-support metric uses expected-string inclusion, so it is only a proxy, not human entailment review.
+Answers use deterministic topic-specific templates from the local corpus, not an LLM generation call. Multi-source care/caution answers use text from each retrieved chunk and cite those chunks. Return-policy topic hints and query expansion prioritize requested time-limit, condition and fee sections. The evaluator separately reports expected-answer fact match, retrieved-evidence lexical coverage and cited-evidence lexical support. These are exact normalized string checks against chunk text/source title, not human entailment review; citation resolution alone still does not prove a claim. Mixed action-intent accuracy checks router labels only; separate API tests cover selected action execution paths, not every offline evaluation case.
 
 The retrieval vectorizer is lexical and can miss paraphrases outside the authored suite. Before production, add signed/versioned artifact provenance, durable multi-host activation coordination, identity-backed authorization, independent reviewed evaluation and a measured semantic embedder if quality requires it. Do not load customer PII into this demo.

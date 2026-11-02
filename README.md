@@ -11,7 +11,7 @@ Dự án mở rộng từ trợ lý thương mại LLM kế thừa, bổ sung tr
   - Hỗ trợ số lượng và biến thể tự nhiên theo thói quen người Việt (*"2c"*, *"2 cái"*, *"chốt 2"*...).
   - Quản lý máy trạng thái đa lượt: không bị ghi đè mất số lượng khi khách nhắc lại sản phẩm, gom slot lũy tiến và xử lý lệnh hủy/đổi ý (`cancel_pending`) an toàn.
   - Phân tách thực thể khỏi câu chat trước khi đối chiếu Catalog SQLite, chống nhầm lẫn tên người hoặc tên đường thành sản phẩm.
-- **Kiểm thử tái lập**: Đạt **100%** trên toàn bộ các bộ kiểm thử: 17/17 Chatbot unit/integration tests, 9/9 Chatbot multi-turn evaluation cases, 10/10 RAG tests, 20/20 RAG eval cases, và 14/14 Inherited e-commerce cases.
+- **Kiểm thử tái lập gần nhất (02/11/2026)**: 23/23 Chatbot unit/integration tests, 9/9 Chatbot evaluation cases, 29/29 RAG tests, 21 bộ RAG cases, holdout hồi quy 20 cases, 14/14 inherited e-commerce cases và frontend production build thành công.
 
 ## Hướng dẫn tái hiện Project (Chạy Local)
 
@@ -95,8 +95,11 @@ python eval/run_chatbot_evaluation.py
 # 3. Kiểm tra unit & integration của RAG Engine và phân quyền
 python -m unittest tests/test_rag.py -v
 
-# 4. Đánh giá chất lượng RAG Retrieval, Citation và Routing (Toàn bộ 20 cases)
+# 4. Đánh giá chất lượng RAG Retrieval, Citation và Routing (Toàn bộ 21 cases)
 python -m eval.run_rag_evaluation --split all
+
+# 4b. Holdout hồi quy V13 (đã tạo sau các vòng điều chỉnh; không phải blind holdout độc lập)
+python -m eval.run_rag_evaluation --split holdout --cases artifacts/evaluation_holdout_v13.jsonl
 
 # 5. Kiểm tra 14 kịch bản thương mại điện tử kế thừa và bảo mật API
 python eval/run_evaluation.py --provider fake
@@ -107,7 +110,9 @@ Set-Location frontend; npm run build
 
 ### Tóm tắt kết quả đo lường:
 - **AI Chatbot Multi-turn Evaluation**: 9/9 cases đạt (**100.0%**), bóc tách chính xác thông tin không nhãn, bảo toàn số lượng đơn nháp qua nhiều lượt và hỗ trợ hủy đơn tức thì.
-- **RAG Evaluation Suite**: Hit@3 **100%**, Recall@5 **93.89%**, MRR **0.9000**, Citation Resolution **100%**, Claim Support Proxy **70%**, Safe Abstention **100%**, Access-denied **100%**, Route/Status Accuracy **100%**.
+- **RAG Evaluation Suite (21 cases)**: Hit@3 **100%**, Recall@5 **97.92%**, MRR **0.9688**, Citation Resolution **100%**, expected-answer fact match **96.43%**, retrieved/cited lexical evidence coverage **100% / 96.43%**; routing, abstention và access control **100%**.
+- **RAG holdout hồi quy V13 (20 cases)**: Hit@3/Recall@5 **100%**, MRR **1.0**, Citation Resolution/fact match/citation lexical support và routing/status/abstention/access control **100%** sau khi sửa hai near-miss multi-condition. V13 được tạo và dùng trong vòng tuning, vì vậy đây là regression set chứ không phải holdout độc lập.
+- Fact/evidence metrics là so khớp chuỗi, không thay thế semantic entailment hoặc human claim review. `Mixed_Action_Intent_Accuracy` chỉ đo ý định do router phân loại; việc tạo đơn/đọc tồn kho được kiểm tra riêng qua API integration tests.
 - **Inherited E-commerce Flow Suite**: **14/14 PASS**, API Smoke 12/12 endpoints 200/201/204, Security Probes chặn can thiệp giá/kho và đơn hàng trái phép đạt 100%.
 
 ## Cấu trúc Thư mục

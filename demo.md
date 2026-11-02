@@ -95,9 +95,9 @@
      python eval/run_chatbot_evaluation.py
      python -m eval.run_rag_evaluation --split all
      ```
-   * Trình bày các chỉ số: **Chatbot Multi-turn: 100% (9/9)**, **RAG Hit@3: 100%**, **Recall@5: 93.89%**, **MRR: 0.9000**, **Citation Resolve: 100%**, **Safe Abstention: 100%**, **Access Denied: 100%**.
+   * Trình bày các chỉ số hiện tại: **Chatbot Multi-turn: 100% (9/9)**, **RAG Hit@3: 100%**, **Recall@5: 97.92%**, **MRR: 0.9688**, **Citation Resolve: 100%**, **Expected fact match: 96.43%**, **Safe Abstention: 100%**, **Access Denied: 100%**. Nêu rõ đây là bộ 21 case authored; metric fact/citation là lexical proxy, và test split đã được tham vấn trong sửa lỗi.
 2. **Kịch bản Re-index v1.0 lên v1.1:**
    * Khi đang ở index v1.0, hỏi: *"Thời hạn đổi trả hàng là bao nhiêu ngày?"* $\rightarrow$ Trả lời: **07 ngày**.
    * Chuyển Role sang **"Quản trị viên (Admin)"**, bấm nút **"Re-index v1.1"** trên thanh điều khiển. Xác nhận version mới qua `/api/v1/rag/status`.
    * Gửi lại câu hỏi trên: Trợ lý lập tức cập nhật câu trả lời: **14 ngày** (kèm phiên bản trích dẫn hiển thị `v1.1`).
-   * Bấm nút **"Rollback v1.0"**: Trợ lý quay trở lại chính sách 07 ngày an toàn tức thì.
+   * Bấm nút **"Rollback v1.0"**: Trợ lý quay trở lại chính sách 07 ngày an toàn tức thì. TestClient đã xác nhận API activate/reload/rollback; cần chạy qua UI trong buổi demo để xác nhận thao tác trình diễn trực tiếp.

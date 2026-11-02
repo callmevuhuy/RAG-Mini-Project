@@ -38,7 +38,14 @@ def run_evaluation(bundle_path=DEFAULT_BUNDLE_PATH, cases_path=ROOT / "artifacts
     citation_resolved_count = 0
     citation_total_count = 0
 
-    claim_supported_count = 0
+    answer_fact_count = 0
+    answer_fact_match_count = 0
+    retrieved_fact_match_count = 0
+    cited_fact_match_count = 0
+    mixed_query_split_count = 0
+    mixed_query_split_match_count = 0
+    mixed_action_intent_count = 0
+    mixed_action_intent_match_count = 0
     route_match_count = 0
     status_match_count = 0
     total_evaluated_cases = len(cases)
@@ -58,6 +65,20 @@ def run_evaluation(bundle_path=DEFAULT_BUNDLE_PATH, cases_path=ROOT / "artifacts
         actual_route = decision.primary_route
         route_match = actual_route == expected_route
         route_match_count += int(route_match)
+        split_expected = case.get("expected_order_query_contains")
+        category_is_mixed = case.get("category") == "mixed"
+        split_match = bool(
+            decision.knowledge_query and decision.order_query
+            and (not split_expected or normalize_text(split_expected) in normalize_text(decision.order_query))
+        ) if category_is_mixed else None
+        if category_is_mixed:
+            mixed_query_split_count += 1
+            mixed_query_split_match_count += int(split_match)
+        expected_action_intent = case.get("expected_action_intent")
+        action_intent_match = decision.intent == expected_action_intent if expected_action_intent else None
+        if expected_action_intent:
+            mixed_action_intent_count += 1
+            mixed_action_intent_match_count += int(action_intent_match)
 
         # 2. Retrieval & Generation
         k_query = decision.knowledge_query or query
@@ -119,23 +140,39 @@ def run_evaluation(bundle_path=DEFAULT_BUNDLE_PATH, cases_path=ROOT / "artifacts
                 mixed_correct += 1
 
         # 5. Claim support check (basic check if key facts in answer)
-        facts = case.get("expected_facts", [])
+        facts = case.get("expected_facts", []) if expected_status == "answered" else []
         ans_text = answer_obj.get("answer", "")
         ans_norm = normalize_text(ans_text)
-        if facts and all(normalize_text(fact) in ans_norm for fact in facts):
-            claim_supported_count += 1
-        elif not facts:
-            claim_supported_count += 1
+        retrieved_norm = normalize_text("\n".join(f"{chunk.source}\n{chunk.text}" for chunk, _ in retrieved))
+        cited_ids = {citation.get("chunk_id") for citation in answer_obj.get("citations", [])}
+        cited_norm = normalize_text("\n".join(
+            f"{chunk.source}\n{chunk.text}" for chunk in index.chunks if chunk.chunk_id in cited_ids
+        ))
+        fact_answer_matches = [normalize_text(fact) in ans_norm for fact in facts]
+        fact_retrieved_matches = [normalize_text(fact) in retrieved_norm for fact in facts]
+        fact_cited_matches = [
+            normalize_text(fact) in ans_norm and normalize_text(fact) in cited_norm for fact in facts
+        ]
+        answer_fact_count += len(facts)
+        answer_fact_match_count += sum(fact_answer_matches)
+        retrieved_fact_match_count += sum(fact_retrieved_matches)
+        cited_fact_match_count += sum(fact_cited_matches)
 
         case_results.append({
             "id": cid,
             "category": category,
             "route_match": route_match,
             "status_match": status_match,
+            "mixed_query_split_match": split_match,
+            "mixed_action_intent_match": action_intent_match,
             "actual_route": actual_route,
             "actual_status": actual_status,
             "citations": [c["chunk_id"] for c in answer_obj.get("citations", [])],
-            "answer_preview": ans_text[:120] + "..." if len(ans_text) > 120 else ans_text
+            "answer_preview": ans_text[:120] + "..." if len(ans_text) > 120 else ans_text,
+            "expected_answer_facts": facts,
+            "answer_fact_matches": fact_answer_matches,
+            "retrieved_evidence_matches": fact_retrieved_matches,
+            "cited_evidence_matches": fact_cited_matches,
         })
 
     # Summary metrics
@@ -146,7 +183,9 @@ def run_evaluation(bundle_path=DEFAULT_BUNDLE_PATH, cases_path=ROOT / "artifacts
     abstention_rate = (safe_abstention_correct / safe_abstention_total) if safe_abstention_total else 1.0
     access_denied_rate = (access_denied_correct / access_denied_total) if access_denied_total else 1.0
     mixed_accuracy = (mixed_correct / mixed_total) if mixed_total else 1.0
-    claim_support_rate = claim_supported_count / total_evaluated_cases
+    answer_fact_match_rate = answer_fact_match_count / answer_fact_count if answer_fact_count else 1.0
+    retrieved_evidence_coverage = retrieved_fact_match_count / answer_fact_count if answer_fact_count else 1.0
+    citation_fact_support_rate = cited_fact_match_count / answer_fact_count if answer_fact_count else 1.0
 
     report = {
         "split": split or "all",
@@ -157,10 +196,14 @@ def run_evaluation(bundle_path=DEFAULT_BUNDLE_PATH, cases_path=ROOT / "artifacts
             "Recall@5": round(mean_recall_at_5 * 100, 2),
             "MRR": round(mrr, 4),
             "Citation_Resolve_Rate": round(citation_resolve_rate * 100, 2),
-            "Claim_Support_Rate": round(claim_support_rate * 100, 2),
+            "Expected_Answer_Fact_Match_Rate": round(answer_fact_match_rate * 100, 2),
+            "Retrieved_Evidence_Lexical_Coverage": round(retrieved_evidence_coverage * 100, 2),
+            "Citation_Evidence_Lexical_Support": round(citation_fact_support_rate * 100, 2),
             "Safe_Abstention_Rate": round(abstention_rate * 100, 2),
             "Access_Denied_Rate": round(access_denied_rate * 100, 2),
             "Mixed_Route_Accuracy": round(mixed_accuracy * 100, 2),
+            "Mixed_Query_Split_Accuracy": round(mixed_query_split_match_count / mixed_query_split_count * 100, 2) if mixed_query_split_count else 100.0,
+            "Mixed_Action_Intent_Accuracy": round(mixed_action_intent_match_count / mixed_action_intent_count * 100, 2) if mixed_action_intent_count else 100.0,
             "Route_Accuracy": round(route_match_count / total_evaluated_cases * 100, 2) if total_evaluated_cases else 100.0,
             "Status_Accuracy": round(status_match_count / total_evaluated_cases * 100, 2) if total_evaluated_cases else 100.0,
         },
@@ -171,13 +214,14 @@ def run_evaluation(bundle_path=DEFAULT_BUNDLE_PATH, cases_path=ROOT / "artifacts
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--split", choices=["dev", "test", "all"], default="all")
+    parser.add_argument("--split", choices=["dev", "test", "holdout", "all"], default="all")
+    parser.add_argument("--cases", type=Path, default=ROOT / "artifacts" / "evaluation_cases.jsonl")
     args = parser.parse_args()
 
     split_arg = None if args.split == "all" else args.split
-    result = run_evaluation(split=split_arg)
+    result = run_evaluation(cases_path=args.cases, split=split_arg)
     print(f"\n=================== RAG EVALUATION REPORT ({args.split.upper()}) ===================")
     print(f"Total Cases: {result['total_cases']}")
     for k, v in result["metrics"].items():
-        print(f" - {k}: {v}{'%' if 'Rate' in k or 'Accuracy' in k or 'Hit' in k or 'Recall' in k else ''}")
+        print(f" - {k}: {v}{'%' if any(term in k for term in ('Rate', 'Accuracy', 'Hit', 'Recall', 'Coverage', 'Support')) else ''}")
     print("==================================================================\n")
