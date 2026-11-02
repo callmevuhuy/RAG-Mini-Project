@@ -54,7 +54,8 @@ ADDRESS_INDICATORS = [
     "tp.", "tp ", "hcm", "hà nội", "ha noi", "đà nẵng", "da nang",
     "q.", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12",
     "p.", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10",
-    "số nhà", "so nha", "ngõ", "ngo", "hẻm", "hem", "tòa nhà", "chung cư"
+    "số nhà", "so nha", "ngõ", "ngo", "hẻm", "hem", "tòa nhà", "chung cư",
+    "street", "st.", "st ", "road", "rd", "avenue", "ave", "ward", "district", "dist."
 ]
 
 
@@ -128,7 +129,7 @@ def extract_quantity(text: str, is_awaiting_qty: bool = False) -> int | None:
             return qty
 
     # 3. Bắt số lượng đi kèm đơn vị tính tự nhiên tiếng Việt: '2c', '2 cái', '2 chiếc', '2 áo'
-    unit_match = re.search(r"\b(\d{1,2})\s*(?:c|cai|chiec|hop|goi|ao|binh|ly)\b", norm)
+    unit_match = re.search(r"\b(\d{1,2})\s*(?:c|cai|chiec|hop|goi|ao|binh|ly|tui|bich|lon|chai|set|phan|suat)\b", norm)
     if unit_match:
         qty = int(unit_match.group(1))
         if 1 <= qty <= 99:
@@ -222,7 +223,8 @@ def extract_contact_info(text: str) -> ContactInfo:
                 has_action = any(k in norm_seg for k in ("chot", "mua", "lay", "dat", "ao", "binh", "ca phe", "don", "order", "shop"))
                 has_addr_ind = any(ind in norm_seg for ind in ADDRESS_INDICATORS)
                 has_digits = bool(re.search(r"\d", seg_clean))
-                if (has_addr_ind or has_digits) and not has_action:
+                has_product_word = any(k in norm_seg for k in ("ao", "binh", "ca phe", "hat", "phin", "size", "mau", "den", "trang", "xanh", "hong", "kem"))
+                if (has_addr_ind or has_digits or (len(segments) > 1 and not has_product_word)) and not has_action:
                     addr_segments.append(seg_clean)
                     residual = residual.replace(seg, " ")
 
@@ -254,12 +256,21 @@ def resolve_catalog_candidates(
     norm_query = normalize_text(search_text)
     candidates = []
 
+    # Từ khóa mở rộng an toàn đặc thù từng sản phẩm trong danh mục
+    PRODUCT_SHORT_KEYWORDS = {
+        "Áo thun basic cotton": ["ao thun", "ao basic", "ao cotton"],
+        "Bình giữ nhiệt Everyday": ["binh giu nhiet", "binh nuoc", "binh inox", "binh everyday", "binh"],
+        "Cà phê rang xay Đà Lạt": ["ca phe", "cafe", "coffee", "rang xay"]
+    }
+
     for product in active_products:
         names = [product.name, *(product.aliases or [])]
-        norm_names = [normalize_text(n) for n in names if n]
+        extra_keywords = PRODUCT_SHORT_KEYWORDS.get(product.name, [])
+        all_terms = names + extra_keywords
+        norm_names = [normalize_text(n) for n in all_terms if n]
 
-        # 1. So khớp trực tiếp chuỗi con
-        if any(name and (name in norm_query or norm_query in name) for name in norm_names):
+        # 1. So khớp trực tiếp chuỗi con có ranh giới từ
+        if any(re.search(rf"\b{re.escape(name)}\b", norm_query) for name in norm_names):
             candidates.append(product)
         else:
             # 2. So khớp từ khóa tập hợp (ít nhất 2 từ khóa trùng khớp)
@@ -367,18 +378,28 @@ async def process_chat_turn(
     order_ref_match = re.search(r"(?:don|order)\s*(?:#|ma)?\s*([a-f0-9]{8,32})", message, re.I)
 
     # 4. NHẬN DIỆN Ý ĐỊNH (INTENT RECOGNITION)
+    pending_has_variant_match = False
+    if pending.get("product_id"):
+        p_obj = db.scalar(select(Product).where(Product.id == pending["product_id"]).options(selectinload(Product.variants)))
+        if p_obj:
+            for v in p_obj.variants:
+                for val in (v.attributes or {}).values():
+                    if normalize_text(val) in norm_msg:
+                        pending_has_variant_match = True
+                        break
+
     if any(k in norm_msg for k in ("nhan vien", "gap nguoi", "ho tro truc tiep", "khieu nai")):
         intent = "unknown_or_handoff"
     elif any(k in norm_msg for k in ("sua don", "doi don", "cap nhat don", "tang so luong", "giam so luong")):
         intent = "update_order"
-    elif any(k in norm_msg for k in ("con hang", "ton kho", "co hang", "co size", "con size", "het hang", "con bao nhieu", "con bn", "con may", "trong kho", "kiem tra kho", "co san", "con khong", "con ko", "so luong con", "so luong ton")):
+    elif any(k in norm_msg for k in ("con hang", "ton kho", "co hang", "co size", "con size", "het hang", "con bao nhieu", "con bn", "con may", "trong kho", "kiem tra kho", "co san", "con khong", "con ko", "so luong con", "so luong ton", "shop co", "shop con", "nhung loai", "cac loai", "loai nao", "dang tim", "tim mua")):
         intent = "check_stock"
     elif re.search(r"\b(?:gia|bao nhieu tien|bao nhieu vnd|gia sao|gia the nao)\b", norm_msg):
         intent = "check_price"
-    elif any(k in norm_msg for k in ("dat mua", "dat hang", "muon dat", "dat ", "mua ", "chot ", "lay ", "cho toi", "cho minh", "them vao don")):
+    elif any(k in norm_msg for k in ("dat mua", "dat hang", "muon dat", "muon mua", "toi muon mua", "minh muon mua", "muon lay", "dat ", "mua ", "chot ", "lay ", "cho toi", "cho minh", "them vao don")):
         intent = "create_order"
-    elif pending and (contact.phone or contact.name or contact.address or quantity):
-        # Nếu đang có pending order và người dùng gửi thông tin bổ sung -> tiếp tục luồng tạo đơn
+    elif pending and (contact.phone or contact.name or contact.address or quantity or pending_has_variant_match):
+        # Nếu đang có pending order và người dùng gửi thông tin bổ sung (kể cả chọn biến thể) -> tiếp tục luồng tạo đơn
         intent = "create_order"
     else:
         intent = "unknown_or_handoff"
@@ -461,14 +482,84 @@ async def process_chat_turn(
 
     # --- NHÁNH: HỎI GIÁ HOẶC KIỂM TRA TỒN KHO ---
     if intent in ("check_price", "check_stock"):
-        if len(candidates) != 1:
+        if len(candidates) == 0:
+            avail_names = ", ".join(p.name for p in active_products)
+            return {
+                "route": "answer",
+                "intent": intent,
+                "message": f"Hiện tại shop chưa có sản phẩm này. Bạn có thể tham khảo các sản phẩm hiện có của shop: {avail_names}."
+            }
+        if len(candidates) > 1:
             return {
                 "route": "needs_information",
                 "intent": intent,
-                "message": "Bạn muốn hỏi về sản phẩm nào? Hãy gửi tên sản phẩm để mình tra cứu chính xác từ hệ thống."
+                "message": f"Bạn muốn hỏi về sản phẩm nào trong các sản phẩm sau: {', '.join(p.name for p in candidates)}?"
             }
+
         product = candidates[0]
-        variant, _ = resolve_variant(product, message, pending.get("variant_attributes"))
+        variant, accumulated_attrs = resolve_variant(product, message, pending.get("variant_attributes"))
+
+        # Kiểm tra nếu người dùng đang tìm kiếm / hỏi tư vấn sản phẩm chung chung
+        is_discovery = any(k in norm_msg for k in ("dang tim", "tim ca phe", "tim ao", "tim binh", "tim mua"))
+        if is_discovery and not variant and not accumulated_attrs:
+            min_price = min(v.unit_price for v in product.variants)
+            max_price = max(v.unit_price for v in product.variants)
+            return {
+                "route": "answer",
+                "intent": "check_price",
+                "message": f"Shop có sản phẩm {product.name} (giá từ {min_price:,}₫ đến {max_price:,}₫). {product.description} Bạn muốn chọn phân loại nào để shop tư vấn nhé?"
+            }
+
+        # Kiểm tra nếu hỏi danh sách các loại ("còn những loại nào", "có các loại nào", "những loại cà phê nào")
+        is_asking_all_types = any(k in norm_msg for k in ("nhung loai", "cac loai", "loai nao"))
+        if is_asking_all_types and not variant:
+            details = "; ".join(
+                f"{', '.join((v.attributes or {}).values())} ({v.unit_price:,}₫: còn {v.inventory.available_quantity if v.inventory else 0})"
+                for v in product.variants
+            )
+            return {
+                "route": "answer",
+                "intent": "check_stock",
+                "message": f"Hiện tại shop có {product.name} với các phân loại: {details}."
+            }
+
+        # Kiểm tra nếu người dùng chọn tổ hợp thuộc tính không tồn tại hoặc chỉ khớp 1 phần
+        if accumulated_attrs and not variant:
+            matching_sub = [
+                v for v in product.variants
+                if all(v.attributes.get(k) == val for k, val in accumulated_attrs.items() if k in v.attributes)
+            ]
+            if not matching_sub:
+                suggestions = []
+                for k, val in accumulated_attrs.items():
+                    sub = [v for v in product.variants if v.attributes.get(k) == val]
+                    if sub:
+                        other_attrs = [f"{', '.join(v.attributes.values())} (còn {v.inventory.available_quantity if v.inventory else 0})" for v in sub]
+                        suggestions.append(f"{val} hiện có: {'; '.join(other_attrs)}")
+                sug_str = ". ".join(suggestions)
+                return {
+                    "route": "answer",
+                    "intent": "check_stock",
+                    "message": f"{product.name} hiện không có phân loại {', '.join(accumulated_attrs.values())}. {sug_str}."
+                }
+            else:
+                details = "; ".join(
+                    f"{', '.join(v.attributes.values())}: còn {v.inventory.available_quantity if v.inventory else 0}"
+                    for v in matching_sub
+                )
+                if len(matching_sub) == 1:
+                    v = matching_sub[0]
+                    return {
+                        "route": "answer",
+                        "intent": "check_stock",
+                        "message": f"Shop có {product.name} ({', '.join(v.attributes.values())}) - hiện còn {v.inventory.available_quantity if v.inventory else 0} sản phẩm trong kho bạn nhé."
+                    }
+                else:
+                    return {
+                        "route": "answer",
+                        "intent": "check_stock",
+                        "message": f"Shop còn các phân loại sau của {product.name}: {details}. Bạn muốn chọn phân loại nào?"
+                    }
 
         if intent == "check_price":
             prices = [f"{v.unit_price:,}₫" for v in ([variant] if variant else product.variants)]
@@ -478,7 +569,13 @@ async def process_chat_turn(
                 "message": f"{product.name} có giá {', '.join(prices)}" + ("." if variant else " tùy phân loại. Bạn muốn xem phân loại nào?")
             }
         elif intent == "check_stock":
-            stock_variants = [variant] if variant else product.variants
+            if variant:
+                return {
+                    "route": "answer",
+                    "intent": intent,
+                    "message": f"Tình trạng hàng của {product.name} ({', '.join(variant.attributes.values())}): còn {variant.inventory.available_quantity if variant.inventory else 0}."
+                }
+            stock_variants = product.variants
             details = "; ".join(
                 f"{', '.join((v.attributes or {}).values()) or v.sku}: còn {v.inventory.available_quantity if v.inventory else 0}"
                 for v in stock_variants
@@ -529,7 +626,12 @@ async def process_chat_turn(
                 state.expires_at = now + PENDING_ORDER_TTL_SECONDS
             db.commit()
 
-            options = "; ".join(", ".join(v.attributes.values()) for v in product.variants)
+            matching_opts = [
+                v for v in product.variants
+                if all(v.attributes.get(k) == val for k, val in accumulated_attrs.items())
+            ] if accumulated_attrs else product.variants
+            target_list = matching_opts if matching_opts else product.variants
+            options = "; ".join(", ".join(v.attributes.values()) for v in target_list)
             return {
                 "route": "needs_information",
                 "intent": intent,
@@ -539,12 +641,25 @@ async def process_chat_turn(
         # Đã xác định được SKU cụ thể
         pending["sku"] = variant.sku
 
+        # Kiểm tra tồn kho ngay lập tức: nếu phân loại đã hết hàng (available <= 0)
+        available = variant.inventory.available_quantity if variant.inventory else 0
+        if available <= 0:
+            avail_options = "; ".join(
+                f"{', '.join(v.attributes.values())}: còn {v.inventory.available_quantity}"
+                for v in product.variants if v.inventory and v.inventory.available_quantity > 0
+            )
+            return {
+                "route": "out_of_stock",
+                "intent": intent,
+                "message": f"Phân loại {product.name} ({', '.join(variant.attributes.values())}) hiện đã hết hàng. Bạn có muốn đổi sang phân loại khác còn hàng không ({avail_options})?"
+            }
+
         # 2. Kiểm tra số lượng
         qty = pending.get("quantity")
         if qty is None:
             # Lưu state và yêu cầu số lượng + các trường còn thiếu
             missing = ["số lượng"] + [
-                label for key, label in (("name", "tên người nhận"), ("phone", "số điện thoại demo"), ("address", "địa chỉ giao hàng demo"))
+                label for key, label in (("name", "tên người nhận"), ("phone", "số điện thoại"), ("address", "địa chỉ giao hàng"))
                 if not pending.get(key)
             ]
             if state is None:
@@ -559,11 +674,10 @@ async def process_chat_turn(
             return {
                 "route": "needs_information",
                 "intent": intent,
-                "message": f"Bạn muốn đặt {product.name} ({variant_desc}). Vui lòng gửi {', '.join(missing)}. Chỉ dùng thông tin giả cho demo nhé."
+                "message": f"Bạn muốn đặt {product.name} ({variant_desc}). Vui lòng gửi {', '.join(missing)}."
             }
 
-        # 3. Kiểm tra tồn kho database SQLite trước khi tiếp tục
-        available = variant.inventory.available_quantity if variant.inventory else 0
+        # 3. Kiểm tra số lượng đặt so với tồn kho
         if qty > available:
             return {
                 "route": "out_of_stock",
@@ -573,7 +687,7 @@ async def process_chat_turn(
 
         # 4. Kiểm tra thông tin nhận hàng bắt buộc (tên, sđt, địa chỉ)
         missing_contact = [
-            label for key, label in (("name", "tên người nhận"), ("phone", "số điện thoại demo"), ("address", "địa chỉ giao hàng demo"))
+            label for key, label in (("name", "tên người nhận"), ("phone", "số điện thoại"), ("address", "địa chỉ giao hàng"))
             if not pending.get(key)
         ]
 
@@ -591,7 +705,7 @@ async def process_chat_turn(
             return {
                 "route": "needs_information",
                 "intent": intent,
-                "message": f"Mình đã ghi nhận {qty} × {product.name} ({variant_desc}). Để tạo đơn nháp, bạn vui lòng gửi {', '.join(missing_contact)}. Chỉ dùng thông tin giả cho demo nhé."
+                "message": f"Mình đã ghi nhận {qty} × {product.name} ({variant_desc}). Để tạo đơn nháp, bạn vui lòng gửi {', '.join(missing_contact)}."
             }
 
         # 5. TẤT CẢ SLOTS ĐÃ ĐẦY ĐỦ -> TẠO ĐƠN HÀNG NHÁP (DRAFT ORDER)

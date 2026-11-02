@@ -17,10 +17,13 @@ Dự án nối RAG vào trợ lý thương mại điện tử hiện có và gi�
 ## 2. Các Nâng Cấp Nổi Bật Đã Triển Khai
 
 1. **AI Chatbot Thông minh & Linh hoạt (P0, P1, P2)**:
-   - Xóa bỏ sự phụ thuộc vào nhãn tiền tố: Khách nhắn tự nhiên *"An, 0901234567, 123 Lê Lợi Q1"*, bot tự động bóc tách đúng Tên, SĐT và Địa chỉ.
+   - Xóa bỏ sự phụ thuộc vào nhãn tiền tố: Khách nhắn tự nhiên *"An, 0901234567, 123 Lê Lợi Q1"* hoặc *"Demo Street"*, bot tự động bóc tách đúng Tên, SĐT và Địa chỉ.
+   - Loại bỏ hoàn toàn câu nhắc nhở gây khó chịu *"Chỉ dùng thông tin giả cho demo nhé."* khi hướng dẫn tạo đơn hàng.
    - Cơ chế Disambiguation: Loại bỏ thông tin liên hệ khỏi câu chat trước khi đối chiếu Catalog SQLite, chống nhầm lẫn tên người hoặc tên đường phố thành sản phẩm.
+   - Nhận diện tồn kho, tìm kiếm sản phẩm và phân loại tự nhiên: Xử lý mượt mà các mẫu câu *"Shop có áo thun xanh không"*, *"Shop còn những loại cà phê nào"*, *"Tôi đang tìm cà phê"*.
+   - Xử lý thông minh khi sản phẩm hoặc phân loại không tồn tại: Thông báo lịch thiệp sản phẩm chưa có (*"Shop có áo khoác không"*), hoặc phân tích cụ thể khi thuộc tính xung đột (*"Bình Xanh bạc hà 750ml"*).
+   - Kiểm tra tồn kho tức thì khi chọn phân loại: Nếu biến thể đã hết hàng (*"áo thun hồng size S"*), bot báo hết hàng ngay và gợi ý các phân loại còn hàng thay vì yêu cầu điền thông tin nhận hàng vô ích.
    - Sửa triệt để lỗi mất trạng thái đa lượt: Khách nhắc lại sản phẩm ở turn sau nhưng không nói lại số lượng thì số lượng vẫn được bảo toàn nguyên vẹn.
-   - Nhận diện câu hỏi tồn kho tự nhiên: Bổ sung các cụm *"còn bao nhiêu"*, *"trong kho"*, *"còn mấy"*, *"kiểm tra kho"* vào bộ định tuyến và chat engine, truy vấn trực tiếp bảng sản phẩm/biến thể trong SQLite thay vì chuyển tiếp vô cớ sang nhân viên hỗ trợ.
    - Thêm tính năng hủy đơn nháp đang chờ (`cancel_pending`) khi khách đổi ý.
 2. **Bảo mật & Phân quyền RAG**:
    - Chặn giả mạo header `X-User-Role`: Chỉ chấp nhận vai trò Staff/Admin khi có `DEMO_STAFF_TOKEN`/`DEMO_ADMIN_TOKEN` khớp cấu hình backend.
@@ -38,7 +41,7 @@ Toàn bộ các bộ kiểm thử được chạy độc lập trên database SQ
 | Bộ kiểm thử | Số ca chạy | Kết quả đạt | Tỷ lệ thành công |
 | :--- | :---: | :---: | :---: |
 | **Chatbot Multi-turn Evaluation** (`eval/run_chatbot_evaluation.py`) | 9 | 9 | **100.0%** |
-| **Chatbot Unit & Integration Tests** (`tests/test_chatbot.py`) | 9 | 9 | **100.0%** |
+| **Chatbot Unit & Integration Tests** (`tests/test_chatbot.py`) | 12 | 12 | **100.0%** |
 | **RAG Evaluation Suite** (`eval/run_rag_evaluation.py`) | 20 | 20 | **100.0%** (Route/Status) |
 | **RAG Unit & Security Tests** (`tests/test_rag.py`) | 10 | 10 | **100.0%** |
 | **Inherited E-commerce Suite** (`eval/run_evaluation.py --provider fake`) | 14 | 14 | **100.0%** |

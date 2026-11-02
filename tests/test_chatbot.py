@@ -171,5 +171,89 @@ class TestChatbotIntegration(unittest.TestCase):
         self.assertIn("Áo thun basic cotton", res.json()["message"])
 
 
+    def test_natural_product_availability_and_stock_queries(self):
+        """Kiểm tra các câu hỏi tồn kho và sự hiện diện của sản phẩm theo cách nói tự nhiên (Issue 2..7)."""
+        # Issue 2: Shop có áo thun xanh không
+        r2 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Shop có áo thun xanh không", "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["route"], "answer")
+        self.assertIn("còn 12", r2.json()["message"])
+
+        # Issue 3: Shop còn áo thun size M không
+        r3 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Shop còn áo thun size M không", "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r3.status_code, 200)
+        self.assertEqual(r3.json()["route"], "answer")
+        self.assertIn("Trắng, M: còn 18", r3.json()["message"])
+        self.assertIn("Xanh, M: còn 12", r3.json()["message"])
+
+        # Issue 4: Shop có áo khoác không (sản phẩm không có trong catalog)
+        r4 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Shop có áo khoác không", "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r4.status_code, 200)
+        self.assertEqual(r4.json()["route"], "answer")
+        self.assertIn("chưa có sản phẩm này", r4.json()["message"])
+
+        # Issue 5: Shop có bình Xanh bạc hà 750ml không (thuộc tính xung đột / không tồn tại)
+        r5 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Shop có bình Xanh bạc hà 750ml không", "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r5.status_code, 200)
+        self.assertEqual(r5.json()["route"], "answer")
+        self.assertIn("không có phân loại", r5.json()["message"])
+
+        # Issue 6: Shop còn những loại cà phê nào thế
+        r6 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Shop còn những loại cà phê nào thế", "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r6.status_code, 200)
+        self.assertEqual(r6.json()["route"], "answer")
+        self.assertIn("250g, Hạt", r6.json()["message"])
+        self.assertIn("Xay phin", r6.json()["message"])
+
+        # Issue 7: Tôi đang tìm cà phê
+        r7 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Tôi đang tìm cà phê", "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r7.status_code, 200)
+        self.assertEqual(r7.json()["route"], "answer")
+        self.assertIn("Cà phê rang xay Đà Lạt", r7.json()["message"])
+
+    def test_out_of_stock_variant_selection(self):
+        """Khách chọn phân loại đã hết hàng (Hồng, S) -> báo out_of_stock và gợi ý phân loại còn hàng (Issue 10)."""
+        res = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "tôi muốn mua áo thun hồng size S", "client_message_id": uuid4().hex
+        })
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["route"], "out_of_stock")
+        self.assertIn("hiện đã hết hàng", res.json()["message"])
+        self.assertIn("Trắng, M: còn 18", res.json()["message"])
+
+    def test_order_guidance_no_demo_notice_and_street_address_extraction(self):
+        """Bỏ câu 'Chỉ dùng thông tin giả cho demo nhé.' và nhận diện đúng địa chỉ 'Demo Street' (Issue 9)."""
+        # Turn 1
+        r1 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "tôi muốn mua 250g cà phê hạt", "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.json()["route"], "needs_information")
+        # Tuyệt đối không chứa câu nhắc thông tin giả
+        self.assertNotIn("Chỉ dùng thông tin giả cho demo nhé", r1.json()["message"])
+
+        # Turn 2: gửi '250g cà phê hạt, Nguyễn Văn A, 0888581566, Demo Street'
+        r2 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "250g cà phê hạt, Nguyễn Văn A, 0888581566, Demo Street", "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["route"], "needs_information")
+        # Đã nhận diện tên, sđt và địa chỉ 'Demo Street', chỉ còn thiếu số lượng
+        self.assertNotIn("địa chỉ", r2.json()["message"])
+        self.assertIn("số lượng", r2.json()["message"])
+        self.assertNotIn("Chỉ dùng thông tin giả cho demo nhé", r2.json()["message"])
+
 if __name__ == "__main__":
     unittest.main()

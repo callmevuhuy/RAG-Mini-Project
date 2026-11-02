@@ -80,11 +80,11 @@ def heuristic(text: str) -> Extraction:
         intent = "unknown_or_handoff"
     elif any(k in t for k in ("sua don", "doi don", "cap nhat don", "tang so luong", "giam so luong")):
         intent = "update_order"
-    elif any(k in t for k in ("con hang", "ton kho", "co hang", "co size", "con size", "het hang", "con bao nhieu", "con bn", "con may", "trong kho", "kiem tra kho", "co san", "con khong", "con ko", "so luong con", "so luong ton")):
+    elif any(k in t for k in ("con hang", "ton kho", "co hang", "co size", "con size", "het hang", "con bao nhieu", "con bn", "con may", "trong kho", "kiem tra kho", "co san", "con khong", "con ko", "so luong con", "so luong ton", "shop co", "shop con", "nhung loai", "cac loai", "loai nao", "dang tim", "tim mua")):
         intent = "check_stock"
     elif re.search(r"\b(?:gia|bao nhieu tien|bao nhieu vnd|gia sao|gia the nao)\b", t):
         intent = "check_price"
-    elif any(k in t for k in ("dat mua", "dat hang", "muon dat", "dat ", "mua ", "chot ", "lay ", "cho toi", "cho minh", "them vao don")):
+    elif any(k in t for k in ("dat mua", "dat hang", "muon dat", "muon mua", "toi muon mua", "minh muon mua", "muon lay", "dat ", "mua ", "chot ", "lay ", "cho toi", "cho minh", "them vao don")):
         intent = "create_order"
     else:
         intent = "unknown_or_handoff"

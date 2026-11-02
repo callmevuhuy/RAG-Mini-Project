@@ -27,7 +27,13 @@ ORDER_ACTION_PATTERNS = [
     r"\bchot\s+\d", r"\bchot\b", r"\bdat mua\b", r"\bdat hang\b", r"\bmua\s+\d", r"\blay\s+\d",
     r"\bthem vao don\b", r"\bthem vao gio\b", r"\bsua don\b", r"\bdoi don\b", r"\bcap nhat don\b",
     r"\bdat\s+\d", r"\btoi muon dat\b", r"\bminh muon dat\b", r"\bmuon dat\b",
-    r"\bcho\s+(?:toi|minh)\s+\d", r"\blay\s+cho\s+(?:toi|minh)\s+\d"
+    r"\bcho\s+(?:toi|minh)\s+\d", r"\blay\s+cho\s+(?:toi|minh)\s+\d",
+    r"\b(?:toi\s+|minh\s+)?muon\s+mua\b",
+    r"\b(?:toi\s+|minh\s+)?muon\s+dat\b",
+    r"\b(?:toi\s+|minh\s+)?muon\s+lay\b",
+    r"\bmua\s+(?:ngay|lien)\b",
+    r"\bdat\s+(?:ngay|lien)\b",
+    r"\bcho\s+(?:toi|minh)\s+(?:mua|dat|lay)\b"
 ]
 
 ORDER_READ_PATTERNS = [
@@ -36,7 +42,13 @@ ORDER_READ_PATTERNS = [
     r"\bcon size\b", r"\bhet hang\b",
     r"\bcon\s+bao\s+nhieu\b", r"\bcon\s+bn\b", r"\bcon\s+may\b",
     r"\btrong\s+kho\b", r"\bkiem\s+tra\s+kho\b", r"\bso\s+luong\s+con\b",
-    r"\bso\s+luong\s+ton\b", r"\bco\s+san\b", r"\bcon\s+(?:khong|ko)\b"
+    r"\bso\s+luong\s+ton\b", r"\bco\s+san\b", r"\bcon\s+(?:khong|ko)\b",
+    r"\b(?:shop|ben\s+minh|ben\s+ban)\s+(?:co|con)\b",
+    r"\b(?:co|con)\s+(?:hang|size|mau|loai|[a-z0-9_-]+)\s+(?:khong|ko|k)\b",
+    r"\b(?:co|con)\s+(?:nhung|cac)\s+loai\b",
+    r"\b(?:co|con)\s+loai\s+nao\b",
+    r"\b(?:dang\s+)?tim\s+(?:mua\s+|kiem\s+)?(?:ao|binh|ca\s+phe|hang|san\s+pham)\b",
+    r"\b(?:dang\s+)?tim\s+(?:ao|binh|ca\s+phe)\b"
 ]
 
 HANDOFF_PATTERNS = [
@@ -91,14 +103,21 @@ def route_message(text: str) -> RouteDecision:
             if any(re.search(p, p_norm) for p in ORDER_ACTION_PATTERNS) or any(re.search(p, p_norm) for p in ORDER_READ_PATTERNS):
                 o_parts.append(part.strip())
 
-        k_query = " ".join(k_parts) if k_parts else text
-        o_query = " ".join(o_parts) if o_parts else text
-        return RouteDecision(
-            primary_route="mixed",
-            knowledge_query=k_query,
-            order_query=o_query,
-            intent="create_order" if has_order_action else "check_stock"
-        )
+        if k_parts and o_parts and k_parts != o_parts:
+            k_query = " ".join(k_parts)
+            o_query = " ".join(o_parts)
+            return RouteDecision(
+                primary_route="mixed",
+                knowledge_query=k_query,
+                order_query=o_query,
+                intent="create_order" if has_order_action else "check_stock"
+            )
+        if has_knowledge:
+            return RouteDecision(
+                primary_route="knowledge_query",
+                knowledge_query=text,
+                intent="knowledge_query"
+            )
 
     # 4. Pure Knowledge query
     if has_knowledge:
