@@ -11,8 +11,6 @@ from unittest.mock import patch
 
 from src.rag import (
     RAGIndex,
-    DeterministicEmbedder,
-    chunk_document,
     generate_grounded_answer,
     DEFAULT_BUNDLE_PATH,
     build_index_bundle,
@@ -93,6 +91,8 @@ class TestRAGEngine(unittest.TestCase):
         # Natural follow-up wording must keep the inventory request separate.
         d6 = route_message("Bình Everyday giữ lạnh được mấy tiếng? Với lại kiểm tra còn bình trắng 500ml trong kho không.")
         self.assertEqual(d6.primary_route, "mixed")
+        assert d6.knowledge_query is not None
+        assert d6.order_query is not None
         self.assertIn("giữ lạnh", d6.knowledge_query)
         self.assertIn("kiểm tra", d6.order_query)
 
@@ -102,6 +102,8 @@ class TestRAGEngine(unittest.TestCase):
 
         d8 = route_message("Thời hạn bảo hành áo lỗi bung chỉ là bao lâu? Đặt mua 1 COFFEE-250G-GRD")
         self.assertEqual(d8.primary_route, "mixed")
+        assert d8.knowledge_query is not None
+        assert d8.order_query is not None
         self.assertNotIn("COFFEE", d8.knowledge_query)
         self.assertIn("COFFEE", d8.order_query)
 
@@ -111,6 +113,7 @@ class TestRAGEngine(unittest.TestCase):
     def test_mixed_bottle_temperature_query_cites_thermal_evidence(self):
         query = "Bình Everyday giữ lạnh được mấy giờ? Kiểm tra giúp bình trắng 500ml còn hàng không."
         decision = route_message(query)
+        assert decision.knowledge_query is not None
         answer = generate_grounded_answer(decision.knowledge_query, self.index.retrieve(decision.knowledge_query, top_k=5))
         self.assertEqual(decision.primary_route, "mixed")
         self.assertIn("18 giờ", answer["answer"])

@@ -31,12 +31,11 @@ from backend.app.chat_engine import (
     extract_contact_info,
     extract_quantity,
     extract_cancellation,
-    normalize_text,
 )
 from backend.app.seed import initialize_database
 from backend.app import main
 from backend.app.db import SessionLocal, engine
-from backend.app.models import AuditLog, Inventory, Order, OrderItem, ProductVariant
+from backend.app.models import AuditLog, Inventory, Order, ProductVariant
 
 
 class TestChatbotExtraction(unittest.TestCase):
@@ -383,6 +382,7 @@ class TestChatbotIntegration(unittest.TestCase):
         with SessionLocal() as db:
             order = db.get(Order, body["order_id"])
             self.assertIsNotNone(order)
+            assert order is not None
             self.assertEqual(order.status, "pending_confirmation")
             self.assertEqual(len(order.items), 1)
             self.assertEqual(order.items[0].sku, "TSHIRT-BLU-M")
@@ -391,6 +391,7 @@ class TestChatbotIntegration(unittest.TestCase):
             inventory = db.scalar(
                 select(Inventory).join(ProductVariant).where(ProductVariant.sku == "TSHIRT-BLU-M")
             )
+            assert inventory is not None
             self.assertEqual(inventory.available_quantity, 12)
             self.assertEqual(len(db.scalars(select(Order).where(Order.id == body["order_id"])).all()), 1)
 
@@ -410,6 +411,7 @@ class TestChatbotIntegration(unittest.TestCase):
         self.assertTrue(body.get("order_id"))
         with SessionLocal() as db:
             order = db.get(Order, body["order_id"])
+            assert order is not None
             self.assertEqual(order.items[0].sku, "COFFEE-250G-GRD")
             self.assertEqual(order.items[0].quantity, 1)
 
