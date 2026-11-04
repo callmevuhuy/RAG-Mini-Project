@@ -25,13 +25,22 @@ DEFAULT_BUNDLE_PATH = ROOT_DIR / "artifacts" / "index_bundle.json"
 
 
 def normalize_text(text: str) -> str:
-    """Normalize Vietnamese text for accent-insensitive matching and vectorization."""
+    """[TIỀN XỬ LÝ TIẾNG VIỆT] Chuẩn hóa văn bản tiếng Việt sang dạng không dấu, chữ thường.
+    
+    Quy trình xử lý:
+    1. Chuẩn hóa phân rã Unicode NFD và lọc bỏ các dấu kết hợp (combining marks).
+    2. Thay thế chữ 'đ'/'Đ' thành 'd' để loại trừ khác biệt chính tả.
+    3. Xóa khoảng trắng thừa ở hai đầu chuỗi.
+    Mục đích: Giúp việc so khớp từ khóa và vector hóa không bị phụ thuộc vào kiểu gõ dấu (telex, vni).
+    """
     if not text:
         return ""
     norm = unicodedata.normalize("NFD", text.lower().replace("đ", "d"))
     return "".join(c for c in norm if unicodedata.category(c) != "Mn").strip()
 
 
+# [DANH SÁCH TỪ DỪNG (STOPWORDS)] Các từ ngữ ngữ pháp hoặc xưng hô thông dụng trong tiếng Việt.
+# Việc lọc bỏ từ dừng giúp vector hóa tập trung vào các từ khóa mang giá trị ngữ nghĩa thực tế.
 STOP_WORDS = {
     "la", "va", "cua", "cho", "toi", "minh", "shop", "duoc", "ve", "de",
     "co", "khong", "thi", "nhung", "nao", "gi", "sao", "giup", "voi", "ban", "vay",
@@ -41,7 +50,14 @@ STOP_WORDS = {
 
 
 def tokenize(text: str) -> list[str]:
-    """Tokenize into words and subword char-grams for exact & fuzzy retrieval."""
+    """[BỘ TÁCH TỪ VÀ N-GRAM KÝ TỰ] Phân rã chuỗi văn bản thành danh sách token phục vụ vector hóa.
+    
+    Quy trình gồm 3 bước:
+    1. Chuẩn hóa tiếng Việt (normalize_text).
+    2. Trích xuất từ đơn (Words): Các chuỗi chữ-số hoặc gạch nối (ví dụ: 'tshirt-blu-m', 'cotton'), lọc bỏ stopwords.
+    3. Sinh 3-gram ký tự (Character Trigrams): Đối với các từ dài >= 4 ký tự, sinh thêm các chuỗi con 3 ký tự
+       (ví dụ: 'cotton' -> 'cot', 'ott', 'tto', 'ton') giúp mô hình tìm kiếm gần đúng (fuzzy) và chịu lỗi chính tả.
+    """
     norm = normalize_text(text)
     words = [w for w in re.findall(r"[a-z0-9_-]+", norm) if w not in STOP_WORDS]
     tokens: list[str] = list(words)
@@ -54,6 +70,18 @@ def tokenize(text: str) -> list[str]:
 
 @dataclass
 class Chunk:
+    """[MÔ HÌNH ĐOẠN VĂN BẢN (CHUNK)] Đại diện cho một đoạn văn bản sau khi cắt nhỏ từ tài liệu Markdown.
+    
+    Các trường dữ liệu quan trọng:
+    - chunk_id: Mã định danh duy nhất của đoạn, format '{doc_id}#c{index:02d}' (ví dụ: 'POL-RETURN-01#c01').
+    - doc_id: Mã tài liệu nguồn (ví dụ: 'POL-RETURN-01').
+    - source: Tên hiển thị đầy đủ của tài liệu (ví dụ: 'Chính sách Đổi trả và Hoàn tiền').
+    - version: Phiên bản tài liệu ('1.0' hoặc '1.1'), hiển thị trong trích dẫn (Citation).
+    - access_level: Cấp độ phân quyền truy cập: 'public' (khách hàng), 'staff' (nhân viên), 'admin' (quản trị).
+    - section: Tiêu đề đề mục H2 của đoạn (ví dụ: 'Thời hạn và Phạm vi áp dụng').
+    - text: Toàn bộ nội dung văn bản markdown của đoạn.
+    - char_offset: Vị trí ký tự bắt đầu của đoạn trong tài liệu gốc, dùng cho việc kiểm toán/audit.
+    """
     chunk_id: str
     doc_id: str
     source: str
@@ -81,10 +109,21 @@ class DeterministicEmbedder:
         self.dim = dim
 
     def _hash_token(self, token: str) -> int:
+        """Băm một token chuỗi thành chỉ số cột (index) trong không gian vector cố định [0, dim - 1].
+        Sử dụng thuật toán MD5 để đảm bảo tính tái lập (deterministic) và phân bổ đều giữa các bin.
+        """
         h = int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16)
         return h % self.dim
 
     def embed(self, text: str) -> list[float]:
+        """Chuyển đổi một đoạn văn bản thành vector đặc trưng 1024 chiều.
+        
+        Quy trình xử lý:
+        1. Tách từ và sinh n-gram qua tokenize().
+        2. Đếm tần suất (Term Frequency): Gán trọng số x3.0 cho các token đặc biệt (mã SKU có dấu '-' hoặc chứa số).
+        3. Làm mượt tần suất: Áp dụng hàm logarit val = ln(1 + count) để tránh từ xuất hiện nhiều lấn át từ hiếm.
+        4. Chuẩn hóa L2-norm: Chia từng phần tử cho căn bậc hai tổng bình phương để vector có độ dài đơn vị 1.0.
+        """
         vec = [0.0] * self.dim
         tokens = tokenize(text)
         if not tokens:
@@ -109,11 +148,21 @@ class DeterministicEmbedder:
 
 
 def cosine_similarity(v1: list[float], v2: list[float]) -> float:
+    """[TÍNH ĐỘ TƯƠNG ĐỒNG COSINE]
+    Vì các vector v1 và v2 đã được chuẩn hóa L2 (độ dài = 1.0), Cosine Similarity chính là tích vô hướng (Dot Product).
+    Kết quả nằm trong khoảng [-1.0, 1.0], giá trị càng cao nghĩa là ngữ cảnh truy vấn và đoạn văn bản càng tương đồng.
+    """
     return sum(a * b for a, b in zip(v1, v2))
 
 
 class RAGIndex:
-    """Index bundle containing vectors, chunk mappings, and manifest metadata."""
+    """[CHỈ MỤC TÌM KIẾM RAG (RAG INDEX)] Quản lý toàn bộ chunks, vector matrix và metadata của hệ thống.
+    
+    Cung cấp các API:
+    - retrieve(): Tìm kiếm Top-K đoạn văn bản phù hợp nhất với câu truy vấn theo phân quyền RBAC.
+    - save() / load(): Đóng gói và nạp chỉ mục từ file JSON bundle có gắn mã hash SHA-256 bảo vệ toàn vẹn.
+    - _validate_integrity(): Xác thực cấu trúc dữ liệu trước khi nạp vào bộ nhớ phục vụ.
+    """
 
     def __init__(
         self,
@@ -129,6 +178,16 @@ class RAGIndex:
         self._validate_integrity()
 
     def _validate_integrity(self) -> None:
+        """[KIỂM TOÀN BỘ CHỈ MỤC] Kiểm tra tính toàn vẹn của bundle trước khi đưa vào phục vụ.
+        
+        Nguyên tắc bảo vệ:
+        1. Số lượng chunks phải bằng đúng số lượng vectors.
+        2. Kích thước vector phải khớp với chiều khai báo (1024).
+        3. Tuyệt đối không có chunk_id trùng lặp.
+        4. Thuộc tính access_level của từng chunk bắt buộc phải nằm trong tập {'public', 'staff', 'admin'}.
+        5. Số lượng chunk và số lượng tài liệu phải khớp tuyệt đối với khai báo trong manifest metadata.
+        Nếu phát hiện sai lệch, từ chối nạp ngay lập tức để tránh lỗi phân quyền hoặc sai lệch dữ liệu.
+        """
         if len(self.chunks) != len(self.vectors):
             raise ValueError(
                 f"Index bundle corrupt: {len(self.chunks)} chunks != {len(self.vectors)} vectors"
@@ -212,6 +271,14 @@ class RAGIndex:
         return candidates[:top_k]
 
     def save(self, file_path: Path | str) -> None:
+        """[ĐÓNG GÓI & LƯU CHỈ MỤC BẢO TOÀN (ATOMIC SAVE WITH INTEGRITY HASH)]
+        
+        Quy trình lưu trữ:
+        1. Tuần tự hóa toàn bộ manifest metadata, chunks và vector embeddings thành cấu trúc JSON chuẩn.
+        2. Tính mã băm SHA-256 trên chuỗi JSON canonical để bảo vệ chống giả mạo hoặc hư hỏng file.
+        3. Ghi ra file tạm với tên ngẫu nhiên UUID và thực hiện lệnh thay thế nguyên tử (os.replace).
+           Cơ chế này đảm bảo không bao giờ xảy ra tình trạng các tiến trình đọc bị lỗi file ghi dở dang.
+        """
         path = Path(file_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
@@ -229,6 +296,14 @@ class RAGIndex:
 
     @classmethod
     def load(cls, file_path: Path | str) -> RAGIndex:
+        """[NẠP CHỈ MỤC VÀ KIỂM TRA MÃ TOÀN VẸN (LOAD & INTEGRITY CHECK)]
+        
+        1. Đọc nội dung bundle từ đường dẫn được chỉ định.
+        2. Tách trường 'integrity_sha256' và tính toán lại mã băm SHA-256 từ phần nội dung còn lại.
+        3. Sử dụng hmac.compare_digest để so khớp thời gian không đổi (timing-attack resistant).
+        4. Ném lỗi ValueError ngay lập tức nếu mã hash không khớp (phát hiện file bị can thiệp trái phép).
+        5. Tái tạo danh sách đối tượng Chunk và trả về thể hiện RAGIndex sẵn sàng phục vụ.
+        """
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Index bundle not found: {path}")
@@ -244,11 +319,21 @@ class RAGIndex:
 
 
 def _canonical_json(value: Any) -> str:
+    """Chuẩn hóa dữ liệu sang chuỗi JSON có sắp xếp khóa (sort_keys=True) để tính mã băm hash đồng nhất."""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def chunk_document(doc_meta: dict[str, Any], text: str) -> list[Chunk]:
-    """Deterministically chunk document by markdown section headings."""
+    """[CẮT ĐOẠN VĂN BẢN THEO CẤU TRÚC NGỮ NGHĨA H2]
+    
+    Quy tắc cắt đoạn:
+    1. Phân tách ngữ nghĩa theo tiêu đề cấp 2 Markdown ('## '). Mỗi đề mục H2 đại diện cho một đơn vị
+       chính sách độc lập (ví dụ: 'Thời hạn', 'Điều kiện', 'Chi phí').
+    2. Nếu có phần mở đầu trước thẻ ## đầu tiên, tạo chunk giới thiệu mang mã 'c00'.
+    3. Đánh số chunk tuần tự theo 2 chữ số: 'c01', 'c02', ...
+    4. Kế thừa và gắn toàn bộ metadata từ manifest (doc_id, source, version, access_level) vào từng chunk.
+    5. Giữ nguyên tiêu đề H2 trong nội dung full_chunk_text để bảo toàn ngữ cảnh phân mục khi vector hóa.
+    """
     doc_id = doc_meta["doc_id"]
     source = doc_meta["title"]
     version = doc_meta.get("version", "1.0")
@@ -291,7 +376,16 @@ def build_index_bundle(
     manifest_path: Path | str = DEFAULT_MANIFEST_PATH,
     version: str = "1.0",
 ) -> RAGIndex:
-    """Ingest manifest-governed documents and produce a reproducible index."""
+    """[QUÁ TRÌNH NẠP DỮ LIỆU & TẠO CHỈ MỤC TÁI LẬP (INGESTION PIPELINE)]
+    
+    Quy trình xây dựng Index Bundle:
+    1. Đọc và thẩm định file 'corpus_manifest.json' (bắt buộc đủ doc_id, filename, title, version, access_level, author).
+    2. Kiểm tra an toàn bảo mật đường dẫn (chống tấn công Path Traversal: cấm file nằm ngoài thư mục corpus).
+    3. Tính mã băm SHA-256 cho từng file tài liệu gốc để phát hiện thay đổi hoặc gian lận nội dung.
+    4. Cắt đoạn toàn bộ tài liệu thành các đơn vị ngữ nghĩa qua hàm chunk_document().
+    5. Vector hóa toàn bộ chunks thành ma trận 1024 chiều bằng DeterministicEmbedder.
+    6. Đóng gói chỉ mục và metadata thành đối tượng RAGIndex sẵn sàng phục vụ hoặc lưu trữ bundle.
+    """
     c_dir = Path(corpus_dir)
     m_path = Path(manifest_path)
     if not m_path.exists():
@@ -363,7 +457,18 @@ def build_index_bundle(
 
 
 def is_restricted_query(query: str) -> bool:
-    """Detect if query asks for internal, staff, or administrative secrets."""
+    """[BỘ LỌC BẢO MẬT PHÂN QUYỀN RBAC] Nhận diện câu hỏi có ý định truy cập tài liệu mật/nội bộ.
+    
+    Quy tắc kiểm tra:
+    1. So khớp các từ khóa nhạy cảm tuyệt đối (Direct Restricted Terms):
+       - Quyền lợi/mã mật: 'staff', 'chiet khau nhan vien', 'ma uu dai noi bo', 'cskh-vip50', 'staff20', 'cskh-sorry'.
+       - Dữ liệu tài chính/vận hành: 'bang luong', 'luong quan ly', 'quy trinh noi bo', 'wms', 'packstation', 'admin ops'.
+    2. So khớp tổ hợp (Contextual Role + Privilege Matching):
+       - Khi câu hỏi xuất hiện danh xưng nội bộ ('nhan vien', 'noi bo', 'quan ly', 'giam doc')
+       - ĐỒNG THỜI đi kèm với từ khóa quyền lợi ('giam gia', 'uu dai', 'chiet khau', 'voucher', 'ma giam', 'luong').
+    
+    Kết quả: Trả về True nếu phát hiện dấu hiệu truy vấn tài liệu nội bộ; False nếu là câu hỏi công khai thông thường.
+    """
     q_norm = normalize_text(query)
     restricted_terms = [
         "staff", "chiet khau nhan vien", "ma uu dai noi bo", "uu dai bi mat", "ma uu dai", "bang luong", "luong quan ly", "luong nhan vien",
@@ -408,6 +513,9 @@ def generate_grounded_answer(
     """
     q_norm = normalize_text(query)
 
+    # --------------------------------------------------------------------------
+    # BƯỚC 1: KIỂM SOÁT PHÂN QUYỀN (RBAC) & CHẶN PROMPT PHÁ HOẠI
+    # --------------------------------------------------------------------------
     if is_restricted_query(query) and user_role == "customer":
         return {
             "status": "access_denied",
@@ -424,6 +532,9 @@ def generate_grounded_answer(
             "missing_information": "safety_destructive_action_rejected",
         }
 
+    # --------------------------------------------------------------------------
+    # BƯỚC 2: TỪ CHỐI AN TOÀN (SAFE ABSTENTION) CHO THỰC THỂ NGOÀI DANH MỤC / THIẾU TÀI LIỆU
+    # --------------------------------------------------------------------------
     foreign_entities = ["giay", "sneaker", "dep", "balo", "mu bao hiem", "dong ho", "xe dap dien", "dien thoai", "may anh"]
     if any(e in q_norm for e in foreign_entities):
         return {
@@ -459,8 +570,11 @@ def generate_grounded_answer(
             "missing_information": "no_matching_evidence_in_corpus",
         }
 
-    # Prefer evidence for the requested topic; unrelated higher-ranked chunks
-    # must not determine the answer.
+    # --------------------------------------------------------------------------
+    # BƯỚC 3: ĐỊNH HƯỚNG TÀI LIỆU THEO CHỦ ĐỀ (TOPIC-BASED RETRIEVAL PREFERENCE)
+    # --------------------------------------------------------------------------
+    # Ưu tiên bằng chứng theo đúng chủ đề người dùng hỏi; tránh việc các chunk
+    # ngẫu nhiên có điểm lexical cao làm sai lệch nội dung câu trả lời.
     topic_terms = {
         "POL-RETURN": ["doi tra", "hoan tien", "doi hang", "doi ao", "doi mau", "doi size", "tra lai"],
         "FAQ-ORDER": ["thieu hang", "giao thieu", "bao thieu", "thieu"],
@@ -530,7 +644,11 @@ def generate_grounded_answer(
             "missing_information": "",
         }
 
-    # Grounded synthesis: extract key factual statements from context
+    # --------------------------------------------------------------------------
+    # BƯỚC 4: TỔNG HỢP CÂU TRẢ LỜI CÓ CĂN CỨ (GROUNDED FACTUAL SYNTHESIS)
+    # --------------------------------------------------------------------------
+    # Khống chế 100% câu trả lời dựa trên nội dung trích xuất từ các chunk trong context;
+    # Không để mô hình tự suy diễn điều khoản bảo hành, giá bán hay cam kết chính sách.
     q_norm = query_norm
     answers: list[str] = []
 
@@ -666,7 +784,10 @@ def generate_grounded_answer(
         headline = summary[1] if len(summary) > 1 and summary[1] else summary[0]
         answers.append(f"Dựa trên tài liệu '{chunk.source}': {headline.strip('# ')}.")
 
-    # The template answers from one selected chunk; do not attach unrelated top-k results.
+    # --------------------------------------------------------------------------
+    # BƯỚC 5: ĐÓNG GÓI HỢP ĐỒNG PHẢN HỒI JSON & TRÍCH DẪN MINH BẠCH (CITATION MAPPING)
+    # --------------------------------------------------------------------------
+    # Chỉ trích dẫn đúng chunk được dùng để trả lời; không gán các chunk ngẫu nhiên khác trong top-k.
     citations = [{
         "chunk_id": chunk.chunk_id, "doc_id": chunk.doc_id, "source": chunk.source,
         "version": chunk.version, "section": chunk.section,
