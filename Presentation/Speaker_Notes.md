@@ -149,8 +149,8 @@
   - **Tập đánh giá RAG (21 cases authored):** Đạt **Hit@3: 100%**, **Recall@5: 97.92%**, **MRR: 0.9688**, tỷ lệ phân giải trích dẫn **Citation Resolution đạt 100%**, và tỷ lệ từ chối an toàn / chặn quyền trái phép đạt **100%**.  
   - **Bộ kiểm thử tự động (Unit & Integration Tests):**  
     - `tests/test_rag.py`: Đạt **29/29 tests PASS** (bảo vệ phân quyền, toàn vẹn bundle, query expansion).  
-    - `tests/test_chatbot.py`: Đạt **24/24 tests PASS** (bảo vệ hội thoại đa lượt, bóc tách không nhãn, out-of-stock, idempotency, prompt injection và re-index API).  
-    - Toàn bộ **53 ca kiểm thử** đều chạy trên cơ sở dữ liệu SQLite cô lập trong bộ nhớ tạm, thời gian thực thi dưới 2 giây.  
+    - `tests/test_chatbot.py`: Đạt **25/25 tests PASS** (bảo vệ hội thoại đa lượt, bóc tách không nhãn, out-of-stock, idempotency, prompt injection, phân quyền RBAC và re-index API).  
+    - Toàn bộ **54 ca kiểm thử** đều chạy trên cơ sở dữ liệu SQLite cô lập trong bộ nhớ tạm, thời gian thực thi dưới 2 giây.  
   - Nhóm cũng đã ghi nhận và phân tích chi tiết **5 trường hợp lỗi và near-miss** trong báo cáo `evaluation_report.md` cùng các biện pháp cải tiến tương ứng."
 
 ---

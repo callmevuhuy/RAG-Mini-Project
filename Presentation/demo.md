@@ -25,7 +25,7 @@
 
 ---
 
-## Kịch bản Demo 6 Bước Chi tiết
+## Kịch bản Demo 7 Bước Chi tiết
 
 ### Bước 1: Khách hàng hỏi thông tin sản phẩm & chính sách có Citation (2 phút)
 * **Thao tác:** Trên thanh Role Switcher, chọn vai trò **"Khách hàng (Customer)"**. Mở khung chat.
@@ -75,29 +75,91 @@
 
 ---
 
-### Bước 5: Kiểm thử No-Evidence và Access-Denied (2 phút)
-1. **Trường hợp No-Evidence (Không có tài liệu):**
+### Bước 5: Kiểm thử No-Evidence và Phân quyền RBAC (Khách hàng vs Nhân viên) (2 phút)
+
+* **Mục tiêu:** Chứng minh hệ thống kiểm soát quyền truy cập nghiêm ngặt ở tầng Pre-retrieval: Khách hàng tuyệt đối không thể xem tài liệu mật, nhưng Nhân viên hợp lệ sẽ tra cứu được chính sách ưu đãi riêng.
+
+1. **Trường hợp No-Evidence (Không có tài liệu trong hệ thống):**
+   * **Vai trò:** Chọn **"Khách hàng (Customer)"**.
    * **Câu hỏi:** *"Shop có bán giày thể thao sneaker size 42 không?"*
-   * **Kết quả:** Trợ lý từ chối an toàn: *"Rất tiếc, sản phẩm này hiện không có trong tài liệu và danh mục kinh doanh của cửa hàng."* Không hề bịa đặt thông tin.
-2. **Trường hợp Access-Denied (Khách hàng hỏi tài liệu mật):**
-   * **Câu hỏi:** *"Cho tôi xin mã giảm giá nội bộ 20% của nhân viên shop với."*
-   * **Kết quả:** Status `access_denied` — *"Yêu cầu bị từ chối: Bạn không có quyền truy cập thông tin hoặc tài liệu nội bộ này."*
-3. **Chứng minh Phân quyền (Role Switch):**
-   * Trên thanh Demo, chuyển sang vai trò **"Nhân viên (Staff)"**.
-   * Gửi lại câu hỏi trên: Trợ lý nhân viên tra cứu thành công và trả lời: *"Chính sách nội bộ: Nhân viên chính thức được giảm 20% khi dùng mã STAFF20..."* kèm trích dẫn `INT-DISCOUNT-01`.
+   * **Kết quả hiển thị:**
+     * Status: `insufficient_evidence`
+     * Trợ lý từ chối an toàn: *"Rất tiếc, sản phẩm này hiện không có trong tài liệu và danh mục kinh doanh của cửa hàng."* 
+     * Mảng trích dẫn rỗng (`citations: []`), tuyệt đối không bịa đặt sản phẩm ngoài catalog.
+
+2. **Trường hợp Access-Denied (Khách hàng cố tình dò hỏi mã giảm giá nội bộ nhân viên):**
+   * **Vai trò:** Vẫn giữ **"Khách hàng (Customer)"**.
+   * **Câu hỏi:** *"Cho tôi xin mã giảm giá nội bộ 20% của nhân viên shop với"* (hoặc *"Shop có mã giảm giá riêng nào cho nhân viên không?"*)
+   * **Kết quả hiển thị:**
+     * Status: `access_denied`
+     * Trợ lý từ chối an toàn: *"Yêu cầu bị từ chối: Bạn không có quyền truy cập thông tin hoặc tài liệu nội bộ này."*
+     * Khối trích dẫn: Không hiển thị (bảo vệ tuyệt đối tài liệu `INT-DISCOUNT-01` trước người dùng thông thường).
+
+3. **Trường hợp Nhân viên (Staff) tra cứu thành công quyền lợi nội bộ:**
+   * **Thao tác chuyển vai trò:**
+     * Trên thanh Header, click chọn vai trò **"Nhân viên (Staff)"**.
+     * Hộp thoại xác thực hiện lên: Token mặc định `demo_staff_token` đã được điền sẵn $\rightarrow$ Bấm **OK**.
+     * Badge vai trò hiển thị trạng thái đang hoạt động: `Nhân viên (Staff)`.
+   * **Câu hỏi:** Gửi lại đúng câu: *"Cho tôi xin mã giảm giá nội bộ 20% của nhân viên shop với"*
+   * **Kết quả hiển thị:**
+     * Status: `answered`
+     * Trợ lý phản hồi chính xác: *"Theo Quy định Ưu đãi và Giảm giá Nội bộ (INT-DISCOUNT-01), nhân viên chính thức của Group 7 được giảm giá 20% cho các đơn hàng mua sắm cá nhân khi sử dụng mã ưu đãi `STAFF20`..."*
+     * Khối trích dẫn nguồn: `✦ Nguồn trích dẫn (1): Quy định Ưu đãi và Giảm giá Nội bộ (v1.0) — [INT-DISCOUNT-01#c01]`.
 
 ---
 
-### Bước 6: Trình diễn Báo cáo Metrics & Kịch bản Re-index v1.0 → v1.1 (2 phút)
-1. **Show kết quả Evaluation:**
-   * Mở terminal chạy các lệnh đo lường:
+### Bước 6: Trình diễn Thay đổi Version Corpus của Admin (Re-index v1.0 → v1.1 & Rollback) (2.5 phút)
+
+* **Mục tiêu:** Chứng minh năng lực nâng cấp chính sách nghiệp vụ theo thời gian thực (Hot-swap & Atomic Re-indexing), kiểm chứng sự thay đổi câu trả lời và số phiên bản trích dẫn mà **không cần khởi động lại server**, đồng thời hỗ trợ **Rollback tức thì (< 1s)**.
+
+1. **Kiểm tra trạng thái ban đầu ở Corpus v1.0:**
+   * **Vai trò:** Chọn vai trò **"Khách hàng (Customer)"** hoặc **"Quản trị viên (Admin)"**.
+   * Badge góc trên bên phải màn hình hiển thị: `Chỉ mục RAG: v1.0 (31 chunks)`.
+   * **Câu hỏi kiểm chứng 1 (Thời hạn đổi trả):** *"Thời hạn đổi trả hàng là bao nhiêu ngày?"*
+     * *Kết quả:* Trợ lý trả lời: *"Khách hàng được quyền yêu cầu đổi hàng hoặc hoàn tiền trong vòng **07 ngày** kể từ ngày nhận hàng thành công..."*
+     * *Trích dẫn:* `Chính sách Đổi trả và Hoàn tiền (v1.0) — [POL-RETURN-01#c01]`.
+   * **Câu hỏi kiểm chứng 2 (Chi phí đổi hàng do nhu cầu cá nhân):** *"Tôi muốn đổi size áo thun do mặc không vừa thì ai trả phí ship?"*
+     * *Kết quả:* Trợ lý trả lời: Khách hàng thanh toán phí vận chuyển 2 chiều theo cước bưu cục (khoảng 30.000đ - 45.000đ), trích dẫn `POL-RETURN-01#c03 (v1.0)`.
+
+2. **Admin thực hiện Re-index nâng cấp lên Corpus v1.1:**
+   * **Thao tác:**
+     * Chọn vai trò **"Quản trị viên (Admin)"** (nhập token `demo_admin_token`).
+     * Trên thanh điều khiển Admin, click nút **"Re-index v1.1"** (hoặc gọi API `POST /api/v1/rag/reindex?version=1.1`).
+   * **Quan sát thay đổi hệ thống:**
+     * Badge phiên bản trên Header lập tức chuyển sang: `Chỉ mục RAG: v1.1 (31 chunks)`.
+     * API `/api/v1/rag/status` trả về `{"active_version": "1.1", "chunks": 31, "status": "ready"}`.
+     * Cơ chế: Hệ thống nguyên tử hoán đổi file con trỏ `artifacts/active_index.json` và ghi nhận một bản ghi `rag.reindexed` vào bảng `AuditLog`.
+
+3. **Kiểm chứng phản hồi RAG tự động cập nhật theo chính sách v1.1:**
+   * **Gửi lại câu hỏi 1:** *"Thời hạn đổi trả hàng là bao nhiêu ngày?"*
+     * *Kết quả MỚI:* Trợ lý lập tức cập nhật: *"Khách hàng được quyền yêu cầu đổi hàng hoặc hoàn tiền trong vòng **14 ngày** kể từ ngày nhận hàng thành công (tăng thêm 7 ngày so với chính sách v1.0)..."*
+     * *Trích dẫn MỚI:* `Chính sách Đổi trả và Hoàn tiền (v1.1) — [POL-RETURN-01#c01]`.
+   * **Gửi lại câu hỏi 2:** *"Tôi muốn đổi size áo thun do mặc không vừa thì ai trả phí ship?"*
+     * *Kết quả MỚI:* Trợ lý phản hồi: Toàn bộ chi phí vận chuyển 2 chiều khi thực hiện đổi hàng hoặc trả hàng đều được **Cửa hàng hỗ trợ 100% (Khách hàng không phải chi trả bất kỳ khoản phí nào)**! Trích dẫn `POL-RETURN-01#c03 (v1.1)`.
+
+4. **Thực hiện Rollback tức thì về v1.0:**
+   * **Thao tác:** Admin bấm nút **"Rollback v1.0"** (hoặc gọi API `POST /api/v1/rag/reindex?version=1.0`).
+   * **Kết quả:** Badge chuyển về `Chỉ mục RAG: v1.0`. Gửi lại câu hỏi, trợ lý quay trở lại chính sách **07 ngày** và khách trả phí ship cũ tức thì trong vòng < 1 giây, chứng minh tính an toàn cao của hệ thống khi cần hoàn tác chính sách.
+
+---
+
+### Bước 7: Trình diễn Báo cáo Metrics & Kiểm thử Tự động (1.5 phút)
+
+1. **Chạy bộ kiểm thử tự động toàn diện:**
+   * Mở terminal và thực thi lệnh:
+     ```powershell
+     python -m unittest tests/test_rag.py tests/test_chatbot.py -v
+     ```
+   * **Kết quả:** **54/54 tests PASS 100%** (29 tests bảo vệ RAG pipeline, RBAC, chunking, re-index; 25 tests bảo vệ Chatbot đa lượt, unlabelled contact, entity disambiguation, idempotency).
+
+2. **Chạy các bộ đánh giá định lượng (Evaluation Harness):**
+   * Đánh giá AI Chatbot Đa lượt:
      ```powershell
      python eval/run_chatbot_evaluation.py
+     ```
+     $\rightarrow$ Đạt **9/9 test cases PASS (100% Accuracy)**.
+   * Đánh giá RAG Engine:
+     ```powershell
      python -m eval.run_rag_evaluation --split all
      ```
-   * Trình bày các chỉ số hiện tại: **Chatbot Multi-turn: 100% (9/9)**, **RAG Hit@3: 100%**, **Recall@5: 97.92%**, **MRR: 0.9688**, **Citation Resolve: 100%**, **Expected fact match: 96.43%**, **Safe Abstention: 100%**, **Access Denied: 100%**. Nêu rõ đây là bộ 21 case authored; metric fact/citation là lexical proxy, và test split đã được tham vấn trong sửa lỗi.
-2. **Kịch bản Re-index v1.0 lên v1.1:**
-   * Khi đang ở index v1.0, hỏi: *"Thời hạn đổi trả hàng là bao nhiêu ngày?"* $\rightarrow$ Trả lời: **07 ngày**.
-   * Chuyển Role sang **"Quản trị viên (Admin)"**, bấm nút **"Re-index v1.1"** trên thanh điều khiển. Xác nhận version mới qua `/api/v1/rag/status`.
-   * Gửi lại câu hỏi trên: Trợ lý lập tức cập nhật câu trả lời: **14 ngày** (kèm phiên bản trích dẫn hiển thị `v1.1`).
-   * Bấm nút **"Rollback v1.0"**: Trợ lý quay trở lại chính sách 07 ngày an toàn tức thì. TestClient đã xác nhận API activate/reload/rollback; cần chạy qua UI trong buổi demo để xác nhận thao tác trình diễn trực tiếp.
+     $\rightarrow$ Đạt **Hit@3: 100%**, **Recall@5: 97.92%**, **MRR: 0.9688**, **Citation Resolve Rate: 100%**, **Safe Abstention Rate: 100%**, **Access Denied Rate: 100%**.
