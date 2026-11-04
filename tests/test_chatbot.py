@@ -359,6 +359,35 @@ class TestChatbotIntegration(unittest.TestCase):
         self.assertEqual(r2.json()["route"], "pending_confirmation")
         self.assertIn("3 × Bình giữ nhiệt Everyday", r2.json()["message"])
 
+    def test_issue16_order_confirmation_includes_full_order_and_recipient_details(self):
+        """Khi nhận đơn hàng thành công, bot phản hồi đầy đủ nội dung đơn hàng (SKU/biến thể, số lượng, tổng tiền) và thông tin người đặt (Issue 16)."""
+        # Turn 1: Chọn sản phẩm
+        r1 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Cho mình lấy 2 bình giữ nhiệt Everyday màu Trắng 500ml",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.json()["route"], "needs_information")
+
+        # Turn 2: Cung cấp thông tin nhận hàng
+        r2 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Bình giữ nhiệt đó gửi cho Trần Bình, sđt 0987654321, địa chỉ 456 Hai Bà Trưng, Quận 3",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["route"], "pending_confirmation")
+        msg = r2.json()["message"]
+        # Nội dung đơn hàng đầy đủ
+        self.assertIn("Đã tạo đơn nháp", msg)
+        self.assertIn("2 × Bình giữ nhiệt Everyday (Trắng, 500ml)", msg)
+        self.assertIn("518,000₫", msg)
+        # Thông tin người đặt/người nhận đầy đủ
+        self.assertIn("Thông tin người nhận:", msg)
+        self.assertIn("Trần Bình", msg)
+        self.assertIn("0987654321", msg)
+        self.assertIn("456 Hai Bà Trưng, Quận 3", msg)
+        self.assertIn("Đơn đang chờ xác nhận; chưa thanh toán hoặc trừ kho.", msg)
+
     def test_mixed_api_creates_validated_order_and_replays_idempotently(self):
         message = (
             "Áo thun bung chỉ được bảo hành trong bao lâu và chốt 2 áo thun basic cotton màu Xanh size M, "

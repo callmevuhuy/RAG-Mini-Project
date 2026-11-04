@@ -55,11 +55,11 @@
 * **Kịch bản 1 (Đặt hàng với thông tin giao hàng KHÔNG NHÃN):**
   * *Lượt 1:* *"Lấy cho mình 1 áo thun basic cotton màu Xanh size M"* $\rightarrow$ Bot ghi nhận sản phẩm và hỏi thông tin người nhận.
   * *Lượt 2 (Nhập liệu tự nhiên không có nhãn 'tên', 'sđt', 'địa chỉ'):* *"Nguyễn Văn An, 0901234567, 123 Lê Lợi, Phường Bến Nghé, Quận 1"*
-  * *Kết quả:* Bot tự động tách Tên, SĐT, Địa chỉ và tạo ngay đơn nháp `#DRAFT...` thành công mà không hỏi lại.
+  * *Kết quả:* Bot tự động tách Tên, SĐT, Địa chỉ và tạo ngay đơn nháp `#DRAFT...` thành công gồm đầy đủ nội dung đơn hàng (1 × Áo thun basic cotton (Xanh, M), tổng tiền) và thông tin người nhận.
 * **Kịch bản 2 (Chống mất số lượng khi nhắc lại sản phẩm):**
   * *Lượt 1:* *"Cho mình lấy 2 bình giữ nhiệt Everyday màu Trắng 500ml"*
   * *Lượt 2:* *"Bình giữ nhiệt đó gửi cho Trần Bình, sđt 0987654321, địa chỉ 456 Hai Bà Trưng, Quận 3"*
-  * *Kết quả:* Bot không bị ghi đè mất số lượng, tạo đơn đúng **2 × Bình giữ nhiệt Everyday** và không bị nhầm chữ "Bình" trong tên người nhận thành sản phẩm (nhờ cơ chế Entity Disambiguation).
+  * *Kết quả:* Bot không bị ghi đè mất số lượng, tạo đơn đúng **2 × Bình giữ nhiệt Everyday (Trắng, 500ml)** và hiển thị đầy đủ thông tin người nhận (Trần Bình, 0987654321, 456 Hai Bà Trưng, Quận 3) mà không bị nhầm chữ "Bình" thành sản phẩm (nhờ cơ chế Entity Disambiguation).
 * **Kịch bản 3 (Đổi ý và hủy đơn an toàn):**
   * Đang trong luồng hỏi thông tin, khách nhắn: *"Thôi mình đổi ý không mua nữa, hủy đơn giúp mình"* $\rightarrow$ Bot xóa sạch state pending và phản hồi lịch sự, không bị kẹt phiên chat.
 

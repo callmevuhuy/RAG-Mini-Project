@@ -804,11 +804,19 @@ async def process_chat_turn(
             db.delete(state)
         db.commit()
 
+        variant_desc = f" ({', '.join(variant.attributes.values())})" if (variant and variant.attributes) else ""
         return {
             "route": "pending_confirmation",
             "intent": intent,
             "order_id": order.id,
-            "message": f"Đã tạo đơn nháp #{order.id[:10].upper()} cho {qty} × {product.name}, tổng {order.total_amount:,}₫. Đơn đang chờ xác nhận; chưa thanh toán hoặc trừ kho."
+            "message": (
+                f"Đã tạo đơn nháp #{order.id[:10].upper()} cho {qty} × {product.name}{variant_desc}, tổng {order.total_amount:,}₫.\n"
+                f"Thông tin người nhận:\n"
+                f"- Tên người nhận: {order.recipient_name}\n"
+                f"- Số điện thoại: {order.phone_number}\n"
+                f"- Địa chỉ giao hàng: {order.delivery_address}\n"
+                f"Đơn đang chờ xác nhận; chưa thanh toán hoặc trừ kho."
+            )
         }
 
     # --- NHÁNH: HANDOFF HOẶC KHÔNG XÁC ĐỊNH ĐƯỢC Ý ĐỊNH ---

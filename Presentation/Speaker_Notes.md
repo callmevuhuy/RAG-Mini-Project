@@ -132,12 +132,13 @@
 ## Slide 11: Nâng cấp Toàn diện AI Chatbot Engine (Thời lượng: ~60 giây)
 
 * **Nội dung thuyết minh:**  
-  "Bên cạnh RAG, điểm cộng nổi bật của nhóm là đã nâng cấp toàn diện bộ não AI Chatbot trong file `backend/app/chat_engine.py`, giải quyết triệt để 15 vấn đề thực tế thường gặp:  
-  1. **Bóc tách thông tin KHÔNG NHÃN:** Khách chỉ cần nhắn tự nhiên: *'Nguyễn Văn An, 0901234567, 123 Lê Lợi Q1'*, bot tự động nhận diện chính xác Tên, Số điện thoại và Địa chỉ mà không cần tiền tố.  
-  2. **Hiểu cách nói đời thường:** Khách gọi *'2c áo'*, *'chốt 2 cái'*, hay *'áo trắng size M'* (bỏ chữ 'thun'), hệ thống vẫn nhận diện đúng sản phẩm.  
+  "Bên cạnh RAG, điểm cộng nổi bật của nhóm là đã nâng cấp toàn diện bộ não AI Chatbot trong file `backend/app/chat_engine.py`, giải quyết triệt để 16 vấn đề thực tế thường gặp:  
+  1. **Bóc tách thông tin KHÔNG NHÃN (Issue 1, 8):** Khách chỉ cần nhắn tự nhiên: *'Nguyễn Văn An, 0901234567, 123 Lê Lợi Q1'*, bot tự động nhận diện chính xác Tên, Số điện thoại và Địa chỉ mà không cần tiền tố.  
+  2. **Hiểu cách nói đời thường (Issue 13, 14):** Khách gọi *'2c áo'*, *'chốt 2 cái'*, hay *'áo trắng size M'* (bỏ chữ 'thun'), hệ thống vẫn nhận diện đúng sản phẩm.  
   3. **Bảo toàn số lượng đa lượt:** Khách nhắn turn 1 lấy 2 bình giữ nhiệt, sang turn 2 chỉ gửi thông tin người nhận, bot không hề bị mất số lượng 2 ban đầu.  
   4. **Entity Disambiguation:** Tách riêng thông tin liên hệ trước khi đối chiếu catalog, không bao giờ nhầm chữ 'Bình' trong tên người nhận thành sản phẩm Bình giữ nhiệt.  
-  5. **Hủy đơn an toàn:** Hỗ trợ lệnh hủy đơn (`cancel_pending`) khi khách đổi ý, xóa sạch trạng thái chờ để giải phóng phiên chat."
+  5. **Hủy đơn an toàn:** Hỗ trợ lệnh hủy đơn (`cancel_pending`) khi khách đổi ý, xóa sạch trạng thái chờ để giải phóng phiên chat.  
+  6. **Phản hồi đơn hàng đầy đủ (Issue 16):** Khi nhận đơn hàng thành công, bot gửi lại tin nhắn tóm tắt trọn vẹn: mã đơn nháp, tên sản phẩm cùng phân loại/biến thể chi tiết, số lượng, tổng tiền và đầy đủ thông tin người nhận (Họ tên, SĐT, Địa chỉ nhận hàng)."
 
 ---
 
@@ -148,8 +149,8 @@
   - **Tập đánh giá RAG (21 cases authored):** Đạt **Hit@3: 100%**, **Recall@5: 97.92%**, **MRR: 0.9688**, tỷ lệ phân giải trích dẫn **Citation Resolution đạt 100%**, và tỷ lệ từ chối an toàn / chặn quyền trái phép đạt **100%**.  
   - **Bộ kiểm thử tự động (Unit & Integration Tests):**  
     - `tests/test_rag.py`: Đạt **29/29 tests PASS** (bảo vệ phân quyền, toàn vẹn bundle, query expansion).  
-    - `tests/test_chatbot.py`: Đạt **23/23 tests PASS** (bảo vệ hội thoại đa lượt, bóc tách không nhãn, out-of-stock, idempotency, prompt injection và re-index API).  
-    - Toàn bộ **52 ca kiểm thử** đều chạy trên cơ sở dữ liệu SQLite cô lập trong bộ nhớ tạm, thời gian thực thi dưới 2 giây.  
+    - `tests/test_chatbot.py`: Đạt **24/24 tests PASS** (bảo vệ hội thoại đa lượt, bóc tách không nhãn, out-of-stock, idempotency, prompt injection và re-index API).  
+    - Toàn bộ **53 ca kiểm thử** đều chạy trên cơ sở dữ liệu SQLite cô lập trong bộ nhớ tạm, thời gian thực thi dưới 2 giây.  
   - Nhóm cũng đã ghi nhận và phân tích chi tiết **5 trường hợp lỗi và near-miss** trong báo cáo `evaluation_report.md` cùng các biện pháp cải tiến tương ứng."
 
 ---

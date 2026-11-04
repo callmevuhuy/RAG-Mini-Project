@@ -147,12 +147,13 @@
 ---
 
 ## Slide 11: Nâng cấp Toàn diện AI Chatbot Engine (`chat_engine.py`)
-- **Giải quyết triệt để 15 Issue hội thoại thực tế:**
-  1. **Bóc tách liên hệ KHÔNG NHÃN:** Khách nhắn *"Nguyễn Văn An, 0901234567, 123 Lê Lợi Q1"*, bot tự nhận diện đúng Tên, SĐT, Địa chỉ.
+- **Giải quyết triệt để 16 Issue hội thoại thực tế:**
+  1. **Bóc tách liên hệ KHÔNG NHÃN (Issue 1, 8):** Khách nhắn *"Nguyễn Văn An, 0901234567, 123 Lê Lợi Q1"*, bot tự nhận diện đúng Tên, SĐT, Địa chỉ.
   2. **Số lượng tự nhiên:** Hiểu *"2c"*, *"2 cái"*, *"chốt 2"*, *"mua 1 đôi"*.
   3. **Bảo toàn số lượng đa lượt:** Khách nhắc lại tên sản phẩm ở lượt sau nhưng không nói số lượng $\rightarrow$ Số lượng không bị ghi đè hay mất mát.
   4. **Entity Disambiguation:** Tách riêng họ tên và địa chỉ đường phố trước khi so khớp Catalog SQLite, chống nhầm tên người (ví dụ: anh "Bình") thành sản phẩm (bình giữ nhiệt).
   5. **Hủy đơn an toàn (`cancel_pending`):** Khách đổi ý không mua nữa $\rightarrow$ Xóa sạch state chờ, không kẹt luồng hội thoại.
+  6. **Phản hồi đơn hàng đầy đủ (Issue 16):** Khi xác nhận đơn nháp (`pending_confirmation`), bot trả lời đầy đủ nội dung đơn hàng (SKU, phân loại/biến thể, số lượng, tổng tiền) và thông tin người nhận (Họ tên, SĐT, Địa chỉ giao hàng).
 
 ---
 
@@ -165,7 +166,7 @@
   - **Mixed Route & Query Split Accuracy:** 100.0%
 - **Bộ Kiểm thử Tự động:**
   - `tests/test_rag.py`: **29/29 tests PASS** (Phân quyền, chunking, tampered bundle, query expansion, multi-condition).
-  - `tests/test_chatbot.py`: **23/23 tests PASS** (Đa lượt, không nhãn, out-of-stock, idempotency, prompt injection, re-index).
+  - `tests/test_chatbot.py`: **24/24 tests PASS** (Đa lượt, không nhãn, out-of-stock, idempotency, prompt injection, re-index).
   - Chatbot Multi-turn Evaluation (`eval/run_chatbot_evaluation.py`): **9/9 cases PASS (100%)**.
   - Inherited E-commerce Suite (`eval/run_evaluation.py`): **14/14 PASS**.
 - **Phân tích 5 Near-misses:** Được khắc phục và có ca kiểm thử hồi quy độc lập bảo vệ.

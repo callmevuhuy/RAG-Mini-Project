@@ -45,7 +45,7 @@ Toàn bộ các bộ kiểm thử được chạy độc lập trên database SQ
 | Bộ kiểm thử | Số ca chạy | Kết quả đạt | Tỷ lệ thành công |
 | :--- | :---: | :---: | :---: |
 | **Chatbot Multi-turn Evaluation** (`eval/run_chatbot_evaluation.py`) | 9 | 9 | **100.0%** |
-| **Chatbot Unit & Integration Tests** (`tests/test_chatbot.py`) | 23 | 23 | **100.0%** |
+| **Chatbot Unit & Integration Tests** (`tests/test_chatbot.py`) | 24 | 24 | **100.0%** |
 | **RAG Evaluation Suite** (`eval/run_rag_evaluation.py`) | 21 | 21 | **100.0%** (Route/Status) |
 | **RAG Unit & Security Tests** (`tests/test_rag.py`) | 29 | 29 | **100.0%** |
 | **Inherited E-commerce Suite** (`eval/run_evaluation.py --provider fake`) | 14 | 14 | **100.0%** |
@@ -83,6 +83,7 @@ Dưới đây là chi tiết toàn bộ các issues phát hiện trong quá trì
 | **Issue 13** | Khách gọi đời thường: *"Tôi muốn mua 2 cái áo trắng size M"* ➔ Báo không tìm thấy sản phẩm; Turn 2 khách nhắn lại bị handoff. | Từ khóa bắt buộc chữ `"thun"`; câu chat chỉ có `"áo"` nên `candidates == []`; Turn 2 không có pending order nên router handoff. | Cho phép từ `"áo"` kết hợp thuộc tính màu/size nhận diện `Áo thun basic cotton` (có danh sách loại trừ an toàn); bảo toàn pending state. | `test_issue13_colloquial_apparel_order_and_multi_turn` |
 | **Issue 14** | Khách hỏi: *"Shop còn áo màu xanh không?"* ➔ Bot báo shop chưa có sản phẩm này. | Từ khóa không khớp do thiếu từ `"thun"` trong câu hỏi màu sắc. | Nhận diện `"áo"` + màu xanh để match `Áo thun basic cotton` và báo chính xác tồn kho của biến thể `Xanh, M` (còn 12 sản phẩm). | `test_issue14_colloquial_apparel_stock_query` |
 | **Issue 15** | Khách đặt: *"3 cái bình giữ nhiệt màu đen"*, bot hỏi: *"Bạn muốn chọn: Đen, 750ml?"*, khách đáp: *"Yes, 3 cái bình màu đen"* ➔ Lặp lại câu hỏi vô tận. | Màu Đen của bình giữ nhiệt chỉ có duy nhất dung tích 750ml nhưng hàm yêu cầu đủ 2 thuộc tính mới chốt; thiếu nhận diện từ khóa đồng thuận. | Tự động chốt biến thể duy nhất khi thuộc tính nhận diện là độc nhất; bổ sung nhận diện từ khóa đồng thuận (`yes`, `ok`, `đúng rồi`...) để kích hoạt biến thể. | `test_issue15_unique_variant_no_clarification_loop` |
+| **Issue 16** | Khách hoàn tất đặt hàng nhưng bot chỉ báo mã đơn và tổng tiền, thiếu phân loại và thông tin người nhận. | Thông báo tạo đơn nháp (`pending_confirmation`) chỉ hiển thị tên sản phẩm chung và tổng tiền, chưa tóm tắt phân loại thuộc tính và thông tin người nhận. | Bổ sung đầy đủ chi tiết biến thể (`variant_desc`), họ tên, SĐT và địa chỉ giao hàng vào phản hồi xác nhận đơn nháp của bot. | `test_issue16_order_confirmation_includes_full_order_and_recipient_details` |
 
 ---
 

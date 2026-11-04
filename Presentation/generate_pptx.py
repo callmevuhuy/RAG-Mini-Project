@@ -160,7 +160,7 @@ def create_presentation():
     p_in2.space_before = Pt(4)
 
     p_in3 = tf_info.add_paragraph()
-    p_in3.text = "Bảo vệ: 52/52 Tests PASS (29 RAG + 23 Chatbot) • 21 RAG Eval Cases (Hit@3 100%, Citation 100%) • 9/9 Chatbot Multi-turn"
+    p_in3.text = "Bảo vệ: 53/53 Tests PASS (29 RAG + 24 Chatbot) • 21 RAG Eval Cases (Hit@3 100%, Citation 100%) • 9/9 Chatbot Multi-turn"
     p_in3.font.size = Pt(12)
     p_in3.font.color.rgb = RGBColor(52, 211, 153)
     p_in3.space_before = Pt(4)
@@ -452,12 +452,12 @@ def create_presentation():
     add_header(s11, "Nâng cấp AI Chatbot Engine (chat_engine.py)")
 
     add_card(s11, Inches(0.8), Inches(1.8), Inches(5.7), Inches(5.0),
-             "Giải quyết Triệt để 15 Issue Thực tế", [
+             "Giải quyết Triệt để 16 Issue Thực tế", [
                  "Bóc tách liên hệ KHÔNG NHÃN (Issue 1, 8): Khách nhắn tự nhiên 'Nguyễn Văn An, 0901234567, 123 Lê Lợi Q1' -> Tách đúng Họ tên, SĐT, Địa chỉ.",
                  "Hiểu số lượng và cách gọi đời thường (Issue 13, 14): '2c áo', '2 cái', 'áo trắng size M' (bỏ từ 'thun') -> Đối chiếu chính xác Áo thun basic cotton.",
                  "Tự động chốt biến thể duy nhất (Issue 15): Bình giữ nhiệt màu đen chỉ có dung tích 750ml -> Chốt luôn biến thể, không hỏi vòng lặp vô tận.",
-                 "Bảo toàn số lượng đa lượt: Khách nhắc lại tên sản phẩm ở turn 2 nhưng không nói lại số lượng -> Số lượng ban đầu không bị ghi đè mất.",
-                 "Hủy đơn nháp tức thì (cancel_pending): Khách đổi ý không mua nữa -> Xóa sạch pending state, kết thúc phiên lịch sự."
+                 "Phản hồi đơn hàng đầy đủ (Issue 16): Khi tạo đơn nháp, bot trả lại đầy đủ chi tiết sản phẩm/biến thể, tổng tiền và toàn bộ thông tin người nhận.",
+                 "Bảo toàn số lượng đa lượt & hủy đơn: Giữ nguyên số lượng khi lặp tên sản phẩm; hỗ trợ hủy đơn tức thì (cancel_pending)."
              ])
 
     add_card(s11, Inches(6.8), Inches(1.8), Inches(5.7), Inches(5.0),
@@ -495,7 +495,7 @@ def create_presentation():
              "2. Kiểm thử Tự động Toàn diện", [
                  "tests/test_rag.py: 29/29 tests PASS",
                  "  • Phân quyền pre-filter, integrity, query expansion, multi-condition.",
-                 "tests/test_chatbot.py: 23/23 tests PASS",
+                 "tests/test_chatbot.py: 24/24 tests PASS",
                  "  • Multi-turn state, không nhãn, out-of-stock, idempotency, prompt injection, re-index API.",
                  "eval/run_chatbot_evaluation.py: 9/9 cases PASS (100.0%)",
                  "eval/run_evaluation.py (Inherited): 14/14 PASS"
