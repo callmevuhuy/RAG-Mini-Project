@@ -371,7 +371,19 @@ def is_restricted_query(query: str) -> bool:
         "packstation", "wms", "giam doc", "tai lieu mat", "noi bo", "cskh-sorry",
         "ma giam gia bi mat", "bang luong"
     ]
-    return any(term in q_norm for term in restricted_terms)
+    if any(term in q_norm for term in restricted_terms):
+        return True
+
+    # [CẢI TIẾN RAG RBAC - ISSUE 18]: Nhận diện kết hợp ngữ cảnh nội bộ/nhân viên với quyền lợi/mã ưu đãi/chiết khấu
+    has_staff = any(s in q_norm for s in ["nhan vien", "noi bo", "staff", "quan ly", "giam doc"])
+    has_privilege = any(p in q_norm for p in [
+        "giam gia", "uu dai", "chiet khau", "voucher", "khuyen mai",
+        "luong", "thu nhap", "dac quyen", "ma giam", "ma uu dai", "ma rieng", "code giam"
+    ])
+    if has_staff and has_privilege:
+        return True
+
+    return False
 
 
 def generate_grounded_answer(
@@ -419,6 +431,24 @@ def generate_grounded_answer(
             "answer": "Rất tiếc, sản phẩm này hiện không có trong tài liệu và danh mục kinh doanh của cửa hàng.",
             "citations": [],
             "missing_information": "product_not_in_catalog_or_corpus",
+        }
+
+    # [CẢI TIẾN RAG SAFE ABSTENTION - ISSUE 18]: Hỏi mã giảm giá/voucher công khai khi tài liệu không có
+    public_discount_inquiry = any(
+        term in q_norm for term in [
+            "ma giam gia", "ma uu dai", "ma khuyen mai", "voucher", "coupon",
+            "phieu giam gia", "code giam gia"
+        ]
+    ) or (
+        any(k in q_norm for k in ["giam gia", "khuyen mai", "uu dai"])
+        and any(k in q_norm for k in ["co khong", "xin", "cho toi", "cho minh", "lay ma", "ap dung"])
+    )
+    if public_discount_inquiry and user_role == "customer":
+        return {
+            "status": "insufficient_evidence",
+            "answer": "Hiện tại cửa hàng không áp dụng mã giảm giá hoặc voucher công khai trong tài liệu chính sách. Bạn có thể theo dõi các chương trình ưu đãi được cập nhật trực tiếp trên trang chủ nhé.",
+            "citations": [],
+            "missing_information": "no_public_discount_code_in_corpus",
         }
 
     if not retrieved:
@@ -508,6 +538,7 @@ def generate_grounded_answer(
         text = chunk.text
         # Answer specific topics directly based on retrieved text
         if "POL-RETURN" in chunk.doc_id:
+            return_terms = ["doi tra", "hoan tien", "tra hang", "doi hang", "doi ao", "doi mau", "doi size", "tra lai", "doi y"]
             requested = []
             if any(term in q_norm for term in ["dieu kien", "can gi", "can nhung gi", "tinh trang", "tem mac", "tem nhan", "loi may", "loi san xuat"]):
                 requested.append("Điều kiện")
@@ -519,6 +550,10 @@ def generate_grounded_answer(
                 requested.append("Thời hạn")
             if "hoan tien sau" in q_norm:
                 requested.append("Chi phí")
+
+            if not any(t in q_norm for t in return_terms) and not requested:
+                # Nếu câu hỏi không chứa từ khóa đổi trả lẫn các mục con của đổi trả, không gán nhầm sang POL-RETURN
+                continue
             selected = [item[0] for item in cited_chunks if not requested or any(
                 normalize_text(term) in normalize_text(item[0].section) for term in requested
             )]

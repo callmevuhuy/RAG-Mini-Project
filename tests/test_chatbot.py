@@ -418,6 +418,60 @@ class TestChatbotIntegration(unittest.TestCase):
         self.assertIn("20%", body_staff["message"])
         self.assertTrue(any(c["doc_id"] == "INT-DISCOUNT-01" for c in body_staff["citations"]))
 
+    def test_issue18_customer_discount_query_logical_handling(self):
+        """Khách hàng hỏi mã giảm giá sản phẩm của nhân viên bị từ chối truy cập (access_denied);
+        Khách hỏi mã giảm giá chung nhận câu từ chối an toàn (insufficient_evidence);
+        Nhân viên có token tra cứu thành công mã ưu đãi nội bộ (Issue 18).
+        """
+        # Case A: Khách hàng hỏi mã giảm giá của nhân viên
+        res_cust = self.client.post(
+            "/api/v1/chat/messages",
+            headers={"Origin": self.origin, "X-User-Role": "customer"},
+            json={
+                "message": "Hãy cho tôi mã giảm giá sản phẩm của nhân viên",
+                "client_message_id": uuid4().hex,
+            },
+        )
+        self.assertEqual(res_cust.status_code, 200)
+        body_cust = res_cust.json()
+        self.assertEqual(body_cust["status"], "access_denied")
+        self.assertEqual(body_cust["citations"], [])
+        self.assertNotIn("Đổi trả và Hoàn tiền", body_cust["message"])
+
+        # Case B: Nhân viên hợp lệ hỏi cùng câu trên
+        res_staff = self.client.post(
+            "/api/v1/chat/messages",
+            headers={
+                "Origin": self.origin,
+                "X-User-Role": "staff",
+                "X-Demo-Role-Token": "demo_staff_token",
+            },
+            json={
+                "message": "Hãy cho tôi mã giảm giá sản phẩm của nhân viên",
+                "client_message_id": uuid4().hex,
+            },
+        )
+        self.assertEqual(res_staff.status_code, 200)
+        body_staff = res_staff.json()
+        self.assertEqual(body_staff["status"], "answered")
+        self.assertIn("STAFF20", body_staff["message"])
+        self.assertTrue(any(c["doc_id"] == "INT-DISCOUNT-01" for c in body_staff["citations"]))
+
+        # Case C: Khách hàng hỏi mã giảm giá công khai chung
+        res_pub = self.client.post(
+            "/api/v1/chat/messages",
+            headers={"Origin": self.origin, "X-User-Role": "customer"},
+            json={
+                "message": "Shop có mã giảm giá không?",
+                "client_message_id": uuid4().hex,
+            },
+        )
+        self.assertEqual(res_pub.status_code, 200)
+        body_pub = res_pub.json()
+        self.assertEqual(body_pub["status"], "insufficient_evidence")
+        self.assertEqual(body_pub["citations"], [])
+        self.assertNotIn("Chính sách Giao hàng", body_pub["message"])
+
     def test_mixed_api_creates_validated_order_and_replays_idempotently(self):
         message = (
             "Áo thun bung chỉ được bảo hành trong bao lâu và chốt 2 áo thun basic cotton màu Xanh size M, "

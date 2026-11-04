@@ -166,8 +166,8 @@
   - **Mixed Route & Query Split Accuracy:** 100.0%
 - **Bộ Kiểm thử Tự động:**
   - `tests/test_rag.py`: **29/29 tests PASS** (Phân quyền, chunking, tampered bundle, query expansion, multi-condition).
-  - `tests/test_chatbot.py`: **25/25 tests PASS** (Đa lượt, không nhãn, out-of-stock, idempotency, prompt injection, phân quyền RBAC, re-index).
-  - **Tổng số Unit Tests:** **54/54 tests PASS (100% Green)**.
+  - `tests/test_chatbot.py`: **26/26 tests PASS** (Đa lượt, không nhãn, out-of-stock, idempotency, prompt injection, phân quyền RBAC, re-index).
+  - **Tổng số Unit Tests:** **55/55 tests PASS (100% Green)**.
   - Chatbot Multi-turn Evaluation (`eval/run_chatbot_evaluation.py`): **9/9 cases PASS (100%)**.
   - Inherited E-commerce Suite (`eval/run_evaluation.py`): **14/14 PASS**.
 - **Phân tích 5 Near-misses:** Được khắc phục và có ca kiểm thử hồi quy độc lập bảo vệ.
