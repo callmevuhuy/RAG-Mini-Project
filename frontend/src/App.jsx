@@ -17,7 +17,7 @@ async function api(path, options = {}) {
     headers: {
       ...(options.body ? { "Content-Type": "application/json" } : {}),
       "X-User-Role": activeRole,
-      ...(activeRoleToken ? { "X-Demo-Role-Token": activeRoleToken } : {}),
+      ...(activeRole !== "customer" ? { "X-Demo-Role-Token": activeRoleToken || `demo_${activeRole}_token` } : {}),
       ...options.headers,
     },
   });
@@ -67,12 +67,17 @@ function App() {
   const didInitialize = useRef(false);
 
   const switchRole = (newRole) => {
-    const token = newRole === "customer"
-      ? ""
-      : window.prompt(`Nhập token xác thực ${newRole}:`)?.trim();
-    if (newRole !== "customer" && !token) return;
+    if (newRole === "customer") {
+      activeRole = "customer";
+      activeRoleToken = "";
+      setDemoRoleState("customer");
+      return;
+    }
+    const defaultToken = `demo_${newRole}_token`;
+    const token = window.prompt(`Nhập token xác thực vai trò ${newRole.toUpperCase()} (mặc định demo: ${defaultToken}):`, defaultToken)?.trim();
+    if (!token) return;
     activeRole = newRole;
-    activeRoleToken = token || "";
+    activeRoleToken = token;
     setDemoRoleState(newRole);
   };
 

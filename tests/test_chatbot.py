@@ -388,6 +388,36 @@ class TestChatbotIntegration(unittest.TestCase):
         self.assertIn("456 Hai Bà Trưng, Quận 3", msg)
         self.assertIn("Đơn đang chờ xác nhận; chưa thanh toán hoặc trừ kho.", msg)
 
+    def test_issue17_staff_internal_discount_query_accessible_only_with_staff_role(self):
+        """Khách hàng bị từ chối truy cập tài liệu mật; Nhân viên (Staff) có token xác thực tra cứu thành công mã ưu đãi nội bộ (Issue 17)."""
+        query = "Cho tôi xin mã giảm giá nội bộ 20% của nhân viên shop với"
+        client_msg_id = uuid4().hex
+
+        # 1. Customer hỏi -> status: access_denied, từ chối an toàn
+        res_customer = self.client.post("/api/v1/chat/messages", headers={
+            "Origin": self.origin,
+            "X-User-Role": "customer",
+        }, json={"message": query, "client_message_id": client_msg_id})
+        self.assertEqual(res_customer.status_code, 200)
+        body_cust = res_customer.json()
+        self.assertEqual(body_cust["status"], "access_denied")
+        self.assertIn("không có quyền truy cập", body_cust["message"])
+        self.assertEqual(body_cust["citations"], [])
+
+        # 2. Staff hỏi kèm token hợp lệ -> trả về mã giảm giá STAFF20 và trích dẫn INT-DISCOUNT-01
+        res_staff = self.client.post("/api/v1/chat/messages", headers={
+            "Origin": self.origin,
+            "X-User-Role": "staff",
+            "X-Demo-Role-Token": "demo_staff_token",
+        }, json={"message": query, "client_message_id": uuid4().hex})
+        self.assertEqual(res_staff.status_code, 200)
+        body_staff = res_staff.json()
+        self.assertEqual(body_staff["route"], "knowledge_query")
+        self.assertEqual(body_staff["status"], "answered")
+        self.assertIn("STAFF20", body_staff["message"])
+        self.assertIn("20%", body_staff["message"])
+        self.assertTrue(any(c["doc_id"] == "INT-DISCOUNT-01" for c in body_staff["citations"]))
+
     def test_mixed_api_creates_validated_order_and_replays_idempotently(self):
         message = (
             "Áo thun bung chỉ được bảo hành trong bao lâu và chốt 2 áo thun basic cotton màu Xanh size M, "

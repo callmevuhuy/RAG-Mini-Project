@@ -79,7 +79,20 @@ class RouteDecision:
 
 
 def route_message(text: str) -> RouteDecision:
-    """Analyze query and classify into order, knowledge, mixed, or safety flow."""
+    """[CẢI TIẾN CỐT LÕI: UNIFIED INTENT ROUTER & TIẾNG VIỆT CLAUSE SPLITTING]
+    
+    Phân loại yêu cầu người dùng thành 5 tuyến nghiệp vụ rõ ràng:
+    1. 'safety_adversarial': Phát hiện và chặn đứng các cuộc tấn công prompt injection,
+       yêu cầu tiết lộ secret key, xóa dữ liệu hoặc can thiệp trái phép.
+    2. 'handoff': Chuyển tiếp tới nhân viên tư vấn khi câu hỏi vượt quá khả năng tự động.
+    3. 'mixed': Yêu cầu phức hợp kết hợp cả hỏi tri thức và thao tác đơn hàng trong một câu chat.
+       Sử dụng Heuristic Clause Splitting theo liên từ tiếng Việt (và, nhưng, rồi, với lại, ngoài ra)
+       để tách độc lập:
+       - knowledge_query: Chuyển sang RAG Engine tra cứu tài liệu có trích dẫn.
+       - order_query: Chuyển sang Chat Engine để đối chiếu SQLite và xử lý nghiệp vụ đơn hàng.
+    4. 'knowledge_query': Câu hỏi thuần túy về chính sách (đổi trả, bảo hành, phí ship), FAQ hoặc catalog sản phẩm.
+    5. 'order_action': Thao tác đặt mua hàng, hỏi giá hiện thời hoặc kiểm tra số lượng tồn kho.
+    """
     norm = normalize_text(text)
 
     # 1. Safety check

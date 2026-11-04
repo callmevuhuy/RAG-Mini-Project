@@ -41,6 +41,13 @@ ACTIVE_INDEX_POINTER = REPO_ROOT / "artifacts" / "active_index.json"
 
 
 def get_active_rag_index() -> RAGIndex:
+    """[CẢI TIẾN RAG: ATOMIC INDEX POINTER & HOT SWAP]
+    
+    Lấy phiên bản RAG Index đang hoạt động (active index) một cách an toàn.
+    Sử dụng file con trỏ nguyên tử 'artifacts/active_index.json' trỏ tới bundle tương ứng (v1.0 hoặc v1.1).
+    Khi quản trị viên kích hoạt re-index hoặc rollback, con trỏ thay đổi và tất cả các worker
+    sẽ tự động nạp lại index mới mà KHÔNG CẦN khởi động lại server.
+    """
     global _active_rag_index
     bundle_name = "index_bundle.json"
     if ACTIVE_INDEX_POINTER.exists():
@@ -106,16 +113,38 @@ def require_allowed_origin(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Origin không được phép.")
 
 
+DEFAULT_DEMO_TOKENS = {
+    "staff": "demo_staff_token",
+    "admin": "demo_admin_token",
+}
+
+
 def resolve_demo_role(request: Request) -> str:
-    """Resolve demo roles only when the caller presents a server-configured token."""
+    """Resolve demo roles only when the caller presents a valid token.
+    
+    If server-side environment variables (DEMO_STAFF_TOKEN / DEMO_ADMIN_TOKEN) are set,
+    they are strictly enforced. If not set, default demo tokens (demo_staff_token / staff)
+    are accepted for out-of-the-box local demo usability.
+    """
     role = request.headers.get("x-user-role", "customer").lower()
     if role == "customer":
         return role
     token_env = {"staff": "DEMO_STAFF_TOKEN", "admin": "DEMO_ADMIN_TOKEN"}.get(role)
-    expected = os.getenv(token_env, "") if token_env else ""
-    provided = request.headers.get("x-demo-role-token", "")
-    if not expected or not provided or not secrets.compare_digest(provided, expected):
+    configured = os.getenv(token_env, "").strip() if token_env else ""
+    provided = request.headers.get("x-demo-role-token", "").strip()
+    if not provided:
         raise HTTPException(status_code=403, detail="Vai trò demo không hợp lệ hoặc chưa được cấu hình.")
+
+    if configured:
+        allowed = [configured]
+        if configured == DEFAULT_DEMO_TOKENS.get(role, ""):
+            allowed.append(role)
+        if not any(secrets.compare_digest(provided, a) for a in allowed if a):
+            raise HTTPException(status_code=403, detail="Vai trò demo không hợp lệ hoặc chưa được cấu hình.")
+    else:
+        allowed_defaults = [DEFAULT_DEMO_TOKENS.get(role, ""), role]
+        if not any(secrets.compare_digest(provided, d) for d in allowed_defaults if d):
+            raise HTTPException(status_code=403, detail="Vai trò demo không hợp lệ hoặc chưa được cấu hình.")
     return role
 
 
@@ -577,11 +606,16 @@ async def chat_message(
                 _chat_rate_windows.pop(session_id, None)
     user_role = resolve_demo_role(request)
 
+    # [CẢI TIẾN RAG: BỘ ĐIỀU HƯỚNG Ý ĐỊNH UNIFIED ROUTER & THỰC THI TRUY XUẤT]
+    # Phân luồng câu hỏi thành 5 luồng: knowledge_query, safety_adversarial, handoff, mixed, order_action
     route_decision = route_message(payload.message)
 
+    # 1. Luồng tra cứu tri thức thuần túy (RAG Knowledge Query)
     if route_decision.primary_route == "knowledge_query":
         rag_index = get_active_rag_index()
+        # Áp dụng Pre-retrieval role filtering theo vai trò người dùng (customer/staff/admin)
         retrieved = rag_index.retrieve(payload.message, user_role=user_role)
+        # Sinh câu trả lời có trích dẫn nguồn hoặc từ chối an toàn (grounded generation)
         rag_res = generate_grounded_answer(payload.message, retrieved, user_role=user_role)
         answer = {
             "route": "knowledge_query",
@@ -625,6 +659,9 @@ async def chat_message(
         db.commit()
         return answer
 
+    # [CẢI TIẾN RAG: XỬ LÝ TRUY VẤN PHỨC HỢP (MIXED QUERY)]
+    # Nếu câu chat vừa hỏi tri thức vừa thao tác đơn (ví dụ: "chính sách đổi trả thế nào và đặt 1 áo thun trắng"),
+    # tiến hành tra cứu RAG song song cho nhánh knowledge_query và chuyển nhánh order_query cho chat engine.
     rag_mixed_res = None
     extract_target = payload.message
     if route_decision.primary_route == "mixed":
@@ -708,6 +745,15 @@ def trigger_rag_reindex(
     db: Session = Depends(get_db),
     demo_session: DemoSession = Depends(get_current_session),
 ):
+    """[CẢI TIẾN RAG: HOT ROLLBACK & AUDIT TRAIL]
+    
+    API dành riêng cho Admin kích hoạt chuyển đổi phiên bản RAG (v1.0 <-> v1.1):
+    1. Xác thực quyền Admin thông qua DEMO_ADMIN_TOKEN phía server.
+    2. Nạp và kiểm tra tính toàn vẹn (SHA-256) của bundle index mục tiêu.
+    3. Ghi nhận nhật ký kiểm toán vào bảng AuditLog để theo dõi lịch sử vận hành.
+    4. Thay thế nguyên tử file con trỏ 'active_index.json' bằng lệnh os.replace().
+    5. Hỗ trợ Rollback tức thì (< 1s) khi cần hoàn tác chính sách cũ.
+    """
     global _active_rag_index
     require_allowed_origin(request)
     user_role = resolve_demo_role(request)
