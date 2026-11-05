@@ -4,12 +4,12 @@
 
 Mở rộng trợ lý thương mại LLM kế thừa bằng ingestion tài liệu, vector retrieval có phân quyền, câu trả lời tiếng Việt có nguồn, và nâng cấp AI Chatbot xử lý hội thoại đa lượt thông minh. Giá, tồn kho, SKU hợp lệ và trạng thái đơn vẫn do backend/SQLite quyết định độc quyền; câu trả lời RAG không được ghi dữ liệu nghiệp vụ.
 
-## Trạng thái hiện tại (02/11/2026)
+## Trạng thái hiện tại (05/11/2026)
 
 | Giai đoạn | Trạng thái | Bằng chứng / giới hạn |
 |---|---|---|
 | Baseline LLM và tích hợp | Hoàn tất cho demo | FastAPI, React, SQLite, luồng giỏ hàng/đơn, Fake provider; legacy eval chạy 14/14 sau cập nhật router. |
-| Nâng cấp AI Chatbot (P0, P1, P2) | Hoàn tất cho demo | Module `backend/app/chat_engine.py` bóc tách thực thể không nhãn (hỗ trợ cả street address), gom slot đa lượt, bảo toàn số lượng khi lặp tên sản phẩm, hủy đơn pending tức thì, xử lý tự nhiên câu hỏi tồn kho/sản phẩm (Issue 2..10), giải đáp chiết khấu/giảm giá (Issue 11), tìm kiếm catalog tiếng Việt (Issue 12), nhận diện cách gọi đời thường 'áo trắng/xanh' (Issue 13, 14), tự động chốt biến thể duy nhất và xử lý xác nhận đồng thuận (Issue 15). Đạt 23/23 chatbot unit/integration tests và 9/9 chatbot eval cases (100%). |
+| Nâng cấp AI Chatbot (P0, P1, P2) | Hoàn tất cho demo | Module `backend/app/chat_engine.py` bóc tách thực thể không nhãn (hỗ trợ cả street address), gom slot đa lượt, bảo toàn số lượng khi lặp tên sản phẩm, hủy đơn pending tức thì, xử lý tự nhiên câu hỏi tồn kho/sản phẩm (Issue 2..10), giải đáp chiết khấu/giảm giá (Issue 11), tìm kiếm catalog tiếng Việt (Issue 12), nhận diện cách gọi đời thường 'áo trắng/xanh' (Issue 13, 14), tự động chốt biến thể duy nhất và xử lý xác nhận đồng thuận (Issue 15), trả về chi tiết đơn nháp (Issue 16), token gate cho nhân viên (Issue 17), xử lý logic câu hỏi mã giảm giá khách hàng (Issue 18), và giải quyết triệt để vòng lặp làm rõ phân loại/chống ô nhiễm thuộc tính biến thể rác (Issue 19). Đạt 27/27 chatbot unit/integration tests và 9/9 chatbot eval cases (100%). Toàn bộ hệ thống đạt 56/56 unit tests tự động. |
 | Corpus và provenance | Hoàn tất cho corpus mẫu | 12 tài liệu, 31 chunks, public/staff/admin; manifest bắt buộc metadata và từ chối đường dẫn ra ngoài corpus. |
 | Ingestion và index | Một phần | Chunk Markdown H2, vector hashed word/character n-gram TF, bundle có SHA-256 và metadata. Có retrieval offline nhưng chưa dùng semantic neural embedding model, nên mục tiêu embedding chất lượng ngữ nghĩa sâu chưa hoàn tất. |
 | Permission-aware RAG | Hoàn tất cho demo cục bộ | Lọc role trước xếp hạng; staff/admin cần token backend cấu hình. Token không đồng nghĩa với SSO hay danh tính người dùng doanh nghiệp. |

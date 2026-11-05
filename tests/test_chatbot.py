@@ -472,6 +472,53 @@ class TestChatbotIntegration(unittest.TestCase):
         self.assertEqual(body_pub["citations"], [])
         self.assertNotIn("Chính sách Giao hàng", body_pub["message"])
 
+    def test_issue19_variant_cross_product_attributes_and_capacity_not_address(self):
+        """Khắc phục Issue 19:
+        1. Thuộc tính dung tích/đơn vị (750ml, 500g...) không bị bóc tách nhầm thành địa chỉ giao hàng.
+        2. Chuyển đổi sản phẩm giữa các lượt không bị dính thuộc tính rác cũ (ví dụ: 'size: M' của Áo thun dính sang Bình giữ nhiệt).
+        3. Không bị lặp vô tận câu hỏi lựa chọn phân loại khi người dùng đã cung cấp đủ thuộc tính (Đen, 750ml).
+        """
+        # Turn 0: Khách bắt đầu với áo thun trắng size M (lưu 'size': 'M' vào pending state)
+        r0 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Cho tôi 1 cái áo trắng size M",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r0.status_code, 200)
+        self.assertIn("Áo thun basic cotton (Trắng, M)", r0.json()["message"])
+
+        # Turn 1: Khách đổi ý sang bình giữ nhiệt: 'Cho tôi 1 bình giữ nhiệt Everyday Đen, 750ml'
+        r1 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Cho tôi 1 bình giữ nhiệt Everyday Đen, 750ml",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.json()["route"], "needs_information")
+        # Nhận diện chính xác biến thể Đen, 750ml, không bị rơi vào vòng lặp hỏi lại 4 phân loại
+        self.assertIn("Bình giữ nhiệt Everyday (Đen, 750ml)", r1.json()["message"])
+        # '750ml' KHÔNG được coi là địa chỉ -> bot vẫn phải yêu cầu địa chỉ giao hàng
+        self.assertIn("địa chỉ", r1.json()["message"].lower())
+
+        # Turn 2: Khách xác nhận lại phân loại 'Đen, 750ml'
+        r2 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Đen, 750ml",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["route"], "needs_information")
+        # Không bị lặp lại danh sách 4 phân loại
+        self.assertNotIn("có nhiều phân loại. Bạn muốn chọn:", r2.json()["message"])
+        self.assertIn("Bình giữ nhiệt Everyday (Đen, 750ml)", r2.json()["message"])
+
+        # Turn 3: Gửi thông tin người nhận hàng không nhãn
+        r3 = self.client.post("/api/v1/chat/messages", headers={"Origin": self.origin}, json={
+            "message": "Nguyễn Văn A, 0901234567, 123 Lê Lợi Quận 1",
+            "client_message_id": uuid4().hex
+        })
+        self.assertEqual(r3.status_code, 200)
+        self.assertEqual(r3.json()["route"], "pending_confirmation")
+        self.assertIn("1 × Bình giữ nhiệt Everyday (Đen, 750ml)", r3.json()["message"])
+        self.assertIn("123 Lê Lợi Quận 1", r3.json()["message"])
+
     def test_mixed_api_creates_validated_order_and_replays_idempotently(self):
         message = (
             "Áo thun bung chỉ được bảo hành trong bao lâu và chốt 2 áo thun basic cotton màu Xanh size M, "

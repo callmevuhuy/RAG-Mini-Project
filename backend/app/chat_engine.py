@@ -224,9 +224,12 @@ def extract_contact_info(text: str) -> ContactInfo:
                 has_addr_ind = any(ind in norm_seg for ind in ADDRESS_INDICATORS)
                 has_digits = bool(re.search(r"\d", seg_clean))
                 has_product_word = any(k in norm_seg for k in ("ao", "binh", "ca phe", "hat", "phin", "size", "mau", "den", "trang", "xanh", "hong", "kem"))
-                if (has_addr_ind or has_digits or (len(segments) > 1 and not has_product_word)) and not has_action:
-                    addr_segments.append(seg_clean)
-                    residual = residual.replace(seg, " ")
+                is_unit_or_attr = bool(re.search(r"^\s*\d+\s*(?:ml|l|g|kg|gsm|k|vnd|d|c|cai|chiec|hop|goi)\b", norm_seg)) or bool(re.search(r"^(?:s|m|l|xl|xxl)$", norm_seg))
+                if (has_addr_ind or (has_digits and not is_unit_or_attr) or (len(segments) > 1 and not has_product_word and not is_unit_or_attr)) and not has_action and not is_unit_or_attr:
+                    # Địa chỉ hợp lệ phải có từ chỉ dẫn địa chỉ hoặc có ít nhất 2 từ
+                    if len(norm_seg.split()) >= 2 or has_addr_ind:
+                        addr_segments.append(seg_clean)
+                        residual = residual.replace(seg, " ")
 
             if addr_segments:
                 address = ", ".join(addr_segments)
@@ -309,13 +312,21 @@ def resolve_variant(
     với thuộc tính mới xuất hiện ở tin nhắn hiện tại (màu Xanh ở turn 2).
     """
     norm_msg = normalize_text(message)
-    accumulated_attrs = dict(pending_variant_attrs or {})
 
-    # 1. Quét tìm các thuộc tính xuất hiện trong tin nhắn hiện tại
+    # 1. Quét tìm tất cả thuộc tính hợp lệ của sản phẩm này
     all_possible_attrs: dict[str, set[str]] = {}
     for v in product.variants:
         for attr_key, attr_val in (v.attributes or {}).items():
             all_possible_attrs.setdefault(attr_key, set()).add(attr_val)
+
+    # Chỉ giữ lại các thuộc tính từ pending thực sự thuộc về sản phẩm này (Issue 19)
+    # Loại bỏ triệt để các thuộc tính rác từ sản phẩm khác (ví dụ: 'size': 'M' của Áo thun tồn sang Bình giữ nhiệt)
+    accumulated_attrs = {
+        k: v for k, v in (pending_variant_attrs or {}).items()
+        if k in all_possible_attrs and v in all_possible_attrs[k]
+    }
+
+    # 2. Quét tìm các thuộc tính xuất hiện trong tin nhắn hiện tại
 
     for attr_key, attr_vals in all_possible_attrs.items():
         for val in attr_vals:
@@ -645,6 +656,12 @@ async def process_chat_turn(
             }
 
         product = candidates[0]
+
+        # Nếu sản phẩm hiện tại khác với sản phẩm đang lưu trong pending, dọn dẹp thuộc tính biến thể cũ (Issue 19)
+        if pending.get("product_id") and pending.get("product_id") != product.id:
+            pending.pop("sku", None)
+            pending.pop("variant_attributes", None)
+
         pending["product_id"] = product.id
         pending["product_name"] = product.name
 
